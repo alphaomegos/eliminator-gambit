@@ -1,2 +1,12 @@
-# eliminator-gambit
-A digital party game of strategy and risk. In this app, two teams take turns eliminating options on-screen, racing to find the single worst item (like the lowest-rated movie). But one wrong tap—eliminating the target itself—makes you lose instantly. A tense, interactive battle of wits for any gathering.
+# The Eliminator’s Gambit
+
+A digital party game of strategy and risk.
+
+Two teams take turns eliminating options on-screen, trying to leave the single worst item (e.g., the lowest-rated movie).
+One wrong tap—eliminating the target itself—ends the round instantly.
+
+## Quick start
+
+```bash
+docker compose up -d --build
+

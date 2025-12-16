@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>The Eliminator’s Gambit</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="header">
+        <div class="brand">
+          <div class="title">The Eliminator’s Gambit</div>
+          <div class="subtitle">Eliminate carefully. One wrong tap ends the round.</div>
+        </div>
+
+        <div class="controls">
+          <select id="categorySelect" class="select"></select>
+          <button id="newRoundBtn" class="btn">New round</button>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="card">
+          <div class="row">
+            <div class="prompt" id="prompt">Loading…</div>
+            <div class="teams">
+              <div class="team" id="team1">Team 1</div>
+              <div class="team" id="team2">Team 2</div>
+            </div>
+          </div>
+          <div class="hint" id="hint">Take turns eliminating options. If you eliminate the target, you lose instantly.</div>
+        </div>
+
+        <ol class="list" id="itemsList"></ol>
+
+        <div class="footer">
+          <div id="statusLine" class="status">—</div>
+        </div>
+      </main>
+
+      <div class="modal hidden" id="modal">
+        <div class="modalCard">
+          <div class="modalTitle" id="modalTitle"></div>
+          <div class="modalText" id="modalText"></div>
+          <div class="modalActions">
+            <button class="btn" id="modalNewRound">Start another</button>
+            <button class="btn secondary" id="modalClose">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
+
