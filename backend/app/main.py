@@ -3,11 +3,11 @@ from __future__ import annotations
 import random
 import uuid
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, conlist
 
 from .db import db_conn, init_pool
 from .datasets import DATASETS, list_categories
@@ -15,6 +15,9 @@ from .datasets import DATASETS, list_categories
 app = FastAPI(title="The Eliminator’s Gambit API", version="0.1.0")
 
 
+# =========================
+# Core round models
+# =========================
 class CreateRoundRequest(BaseModel):
     category: str = Field(default="movies")
 
@@ -27,7 +30,9 @@ class ItemOut(BaseModel):
     id: uuid.UUID
     title: str
     eliminated: bool
+    eliminated_by_team: Optional[int] = None
     rating: Optional[Decimal] = None
+    secret_text: Optional[str] = None
     is_target: Optional[bool] = None
 
 
@@ -42,6 +47,49 @@ class RoundOut(BaseModel):
     items: List[ItemOut]
 
 
+# =========================
+# Templates / round sets models
+# =========================
+TemplateKind = Literal["rated", "manual"]
+
+
+class TemplateItemIn(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    rating: Optional[Decimal] = None          # rated
+    secret_text: Optional[str] = None         # manual (hidden info)
+    is_target: bool = False                   # manual (exactly 1)
+
+
+class TemplateCreate(BaseModel):
+    kind: TemplateKind = "rated"
+    name: str = Field(min_length=1, max_length=120)
+    prompt: str = Field(min_length=1, max_length=300)
+    items: conlist(TemplateItemIn, min_length=2)
+
+
+class TemplateSummary(BaseModel):
+    id: uuid.UUID
+    name: str
+    prompt: str
+    kind: str
+    item_count: int
+
+
+class TemplateOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    prompt: str
+    kind: str
+    items: List[TemplateItemIn]
+
+
+class CreateRoundFromTemplateRequest(BaseModel):
+    template_id: uuid.UUID
+
+
+# =========================
+# Startup / misc
+# =========================
 @app.on_event("startup")
 def _startup() -> None:
     init_pool()
@@ -55,6 +103,41 @@ def health() -> Dict[str, str]:
 @app.get("/api/categories")
 def categories() -> Dict[str, List[str]]:
     return {"categories": list_categories()}
+
+
+# =========================
+# Helpers
+# =========================
+def _validate_template(kind: str, items: List[TemplateItemIn]) -> None:
+    if kind not in ("rated", "manual"):
+        raise HTTPException(status_code=400, detail="Unknown template kind")
+
+    if len(items) < 2:
+        raise HTTPException(status_code=400, detail="Template must have at least 2 items")
+
+    if kind == "rated":
+        for it in items:
+            if it.rating is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Rated round: each item must have a numeric rating",
+                )
+        return
+
+    # manual
+    targets = [it for it in items if bool(it.is_target)]
+    if len(targets) != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Manual round: exactly 1 item must be marked as target",
+        )
+
+    for it in items:
+        if not (it.secret_text and it.secret_text.strip()):
+            raise HTTPException(
+                status_code=400,
+                detail="Manual round: each item must have hidden info (secret_text)",
+            )
 
 
 def _round_to_response(round_id: uuid.UUID) -> RoundOut:
@@ -85,7 +168,7 @@ def _round_to_response(round_id: uuid.UUID) -> RoundOut:
 
             cur.execute(
                 """
-                SELECT id, title, eliminated, rating
+                SELECT id, title, eliminated, rating, secret_text, eliminated_by_team
                 FROM items
                 WHERE round_id = %s
                 ORDER BY title ASC
@@ -97,15 +180,16 @@ def _round_to_response(round_id: uuid.UUID) -> RoundOut:
     reveal_all = status == "finished"
 
     items: List[ItemOut] = []
-    for iid, title, eliminated, rating in items_rows:
-        show_rating = reveal_all or bool(eliminated)
-
+    for iid, title, eliminated, rating, secret_text, eliminated_by_team in items_rows:
+        show_hidden = reveal_all or bool(eliminated)
         items.append(
             ItemOut(
                 id=iid,
                 title=title,
                 eliminated=bool(eliminated),
-                rating=rating if show_rating else None,
+                eliminated_by_team=int(eliminated_by_team) if eliminated_by_team is not None else None,
+                rating=rating if (show_hidden and rating is not None) else None,
+                secret_text=secret_text if (show_hidden and secret_text is not None) else None,
                 is_target=(iid == target_item_id) if reveal_all else None,
             )
         )
@@ -122,6 +206,9 @@ def _round_to_response(round_id: uuid.UUID) -> RoundOut:
     )
 
 
+# =========================
+# Core round endpoints
+# =========================
 @app.post("/api/rounds", response_model=RoundOut)
 def create_round(req: CreateRoundRequest) -> Any:
     category = req.category.strip().lower()
@@ -152,8 +239,8 @@ def create_round(req: CreateRoundRequest) -> Any:
             for it in picked:
                 cur.execute(
                     """
-                    INSERT INTO items (round_id, title, rating, eliminated)
-                    VALUES (%s, %s, %s, false)
+                    INSERT INTO items (round_id, title, rating, secret_text, eliminated)
+                    VALUES (%s, %s, %s, NULL, false)
                     RETURNING id
                     """,
                     (round_id, it.title, it.rating),
@@ -265,6 +352,237 @@ def eliminate(round_id: uuid.UUID, req: EliminateRequest) -> Any:
                 "UPDATE rounds SET current_team=%s WHERE id=%s",
                 (next_team, round_id),
             )
+        conn.commit()
+
+    return _round_to_response(round_id)
+
+
+# =========================
+# Templates endpoints
+# =========================
+@app.get("/api/templates", response_model=Dict[str, List[TemplateSummary]])
+def list_templates() -> Dict[str, List[TemplateSummary]]:
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT t.id, t.name, t.prompt, t.kind, COUNT(i.id) AS item_count
+                FROM templates t
+                LEFT JOIN template_items i ON i.template_id = t.id
+                GROUP BY t.id, t.kind
+                ORDER BY t.updated_at DESC, t.created_at DESC
+                """
+            )
+            rows = cur.fetchall()
+
+    return {
+        "templates": [
+            TemplateSummary(
+                id=r[0],
+                name=r[1],
+                prompt=r[2],
+                kind=r[3],
+                item_count=int(r[4]),
+            )
+            for r in rows
+        ]
+    }
+
+
+@app.get("/api/templates/{template_id}", response_model=TemplateOut)
+def get_template(template_id: uuid.UUID) -> Any:
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, name, prompt, kind FROM templates WHERE id=%s", (template_id,))
+            tpl = cur.fetchone()
+            if not tpl:
+                raise HTTPException(status_code=404, detail="Template not found")
+
+            cur.execute(
+                """
+                SELECT title, rating, secret_text, is_target
+                FROM template_items
+                WHERE template_id=%s
+                ORDER BY title ASC
+                """,
+                (template_id,),
+            )
+            items = cur.fetchall()
+
+    return TemplateOut(
+        id=tpl[0],
+        name=tpl[1],
+        prompt=tpl[2],
+        kind=tpl[3],
+        items=[
+            TemplateItemIn(title=t, rating=r, secret_text=s, is_target=bool(it))
+            for (t, r, s, it) in items
+        ],
+    )
+
+
+@app.post("/api/templates", response_model=TemplateOut)
+def create_template(body: TemplateCreate) -> Any:
+    _validate_template(body.kind, body.items)
+
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO templates (name, prompt, kind) VALUES (%s, %s, %s) RETURNING id",
+                (body.name.strip(), body.prompt.strip(), body.kind),
+            )
+            (tpl_id,) = cur.fetchone()
+
+            for it in body.items:
+                rating = it.rating if body.kind == "rated" else None
+                secret_text = (it.secret_text.strip() if it.secret_text else None) if body.kind == "manual" else None
+                is_target = bool(it.is_target) if body.kind == "manual" else False
+
+                cur.execute(
+                    """
+                    INSERT INTO template_items (template_id, title, rating, secret_text, is_target)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (tpl_id, it.title.strip(), rating, secret_text, is_target),
+                )
+
+        conn.commit()
+
+    return get_template(tpl_id)
+
+
+@app.put("/api/templates/{template_id}", response_model=TemplateOut)
+def update_template(template_id: uuid.UUID, body: TemplateCreate) -> Any:
+    _validate_template(body.kind, body.items)
+
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM templates WHERE id=%s", (template_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Template not found")
+
+            cur.execute(
+                "UPDATE templates SET name=%s, prompt=%s, kind=%s WHERE id=%s",
+                (body.name.strip(), body.prompt.strip(), body.kind, template_id),
+            )
+
+            cur.execute("DELETE FROM template_items WHERE template_id=%s", (template_id,))
+            for it in body.items:
+                rating = it.rating if body.kind == "rated" else None
+                secret_text = (it.secret_text.strip() if it.secret_text else None) if body.kind == "manual" else None
+                is_target = bool(it.is_target) if body.kind == "manual" else False
+
+                cur.execute(
+                    """
+                    INSERT INTO template_items (template_id, title, rating, secret_text, is_target)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (template_id, it.title.strip(), rating, secret_text, is_target),
+                )
+
+        conn.commit()
+
+    return get_template(template_id)
+
+
+@app.delete("/api/templates/{template_id}")
+def delete_template(template_id: uuid.UUID) -> Dict[str, str]:
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM templates WHERE id=%s", (template_id,))
+        conn.commit()
+    return {"status": "deleted"}
+
+
+# =========================
+# Create runtime round from template (rated/manual)
+# =========================
+@app.post("/api/rounds/from-template", response_model=RoundOut)
+def create_round_from_template(req: CreateRoundFromTemplateRequest) -> Any:
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, name, prompt, kind FROM templates WHERE id=%s",
+                (req.template_id,),
+            )
+            tpl = cur.fetchone()
+            if not tpl:
+                raise HTTPException(status_code=404, detail="Template not found")
+
+            tpl_id, name, prompt, kind = tpl
+
+            cur.execute(
+                """
+                SELECT title, rating, secret_text, is_target
+                FROM template_items
+                WHERE template_id=%s
+                """,
+                (tpl_id,),
+            )
+            rows = cur.fetchall()
+
+    if len(rows) < 2:
+        raise HTTPException(status_code=400, detail="Template must have at least 2 items")
+
+    if kind == "rated":
+        # rating must exist (validation guarantees)
+        min_idx, (target_title, target_rating, _, _) = min(enumerate(rows), key=lambda p: p[1][1])
+    elif kind == "manual":
+        targets = [(i, r) for i, r in enumerate(rows) if bool(r[3])]
+        if len(targets) != 1:
+            raise HTTPException(status_code=400, detail="Manual round: exactly 1 target must be set")
+        min_idx, (target_title, _, _, _) = targets[0]
+        target_rating = None
+    else:
+        raise HTTPException(status_code=400, detail="Unknown template kind")
+
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO rounds (category, prompt, current_team, status, target_item_id)
+                VALUES (%s, %s, 1, 'active', '00000000-0000-0000-0000-000000000000')
+                RETURNING id
+                """,
+                (str(name), str(prompt)),
+            )
+            (round_id,) = cur.fetchone()
+
+            target_item_id: Optional[uuid.UUID] = None
+
+            for idx, (title, rating, secret_text, is_target) in enumerate(rows):
+                if kind == "rated":
+                    ins_rating = rating
+                    ins_secret = None
+                else:
+                    ins_rating = None
+                    ins_secret = secret_text
+
+                cur.execute(
+                    """
+                    INSERT INTO items (round_id, title, rating, secret_text, eliminated)
+                    VALUES (%s, %s, %s, %s, false)
+                    RETURNING id
+                    """,
+                    (round_id, title, ins_rating, ins_secret),
+                )
+                (iid,) = cur.fetchone()
+
+                if kind == "rated":
+                    if idx == min_idx:
+                        target_item_id = iid
+                else:
+                    if bool(is_target):
+                        target_item_id = iid
+
+            if target_item_id is None:
+                raise HTTPException(status_code=500, detail="Failed to resolve target_item_id")
+
+            cur.execute(
+                "UPDATE rounds SET target_item_id=%s WHERE id=%s",
+                (target_item_id, round_id),
+            )
+
         conn.commit()
 
     return _round_to_response(round_id)

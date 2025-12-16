@@ -15,28 +15,113 @@
         </div>
 
         <div class="controls">
-          <select id="categorySelect" class="select"></select>
-          <button id="newRoundBtn" class="btn">New round</button>
+          <button id="menuBtn" class="btn secondary hidden">Menu</button>
         </div>
       </header>
 
       <main class="main">
-        <div class="card">
-          <div class="row">
-            <div class="prompt" id="prompt">Loading…</div>
-            <div class="teams">
-              <div class="team" id="team1">Team 1</div>
-              <div class="team" id="team2">Team 2</div>
+        <!-- MENU -->
+        <section id="screenMenu" class="screen">
+          <div class="card">
+            <div class="menuGrid">
+              <button id="goNewGame" class="btn big">New game</button>
+              <button id="goEditRounds" class="btn big secondary">Edit rounds</button>
             </div>
           </div>
-          <div class="hint" id="hint">Take turns eliminating options. If you eliminate the target, you lose instantly.</div>
-        </div>
+        </section>
 
-        <ol class="list" id="itemsList"></ol>
+        <!-- TEAMS -->
+        <section id="screenTeams" class="screen hidden">
+          <div class="card">
+            <div class="form">
+              <div class="formRow">
+                <label class="label" for="team1Input">Team 1 name</label>
+                <input id="team1Input" class="input" placeholder="Team 1" />
+              </div>
 
-        <div class="footer">
-          <div id="statusLine" class="status">—</div>
-        </div>
+              <div class="formRow">
+                <label class="label" for="team2Input">Team 2 name</label>
+                <input id="team2Input" class="input" placeholder="Team 2" />
+              </div>
+
+              <div class="formRow">
+                <label class="label" for="roundSetSelect">Round set</label>
+                <select id="roundSetSelect" class="select"></select>
+              </div>
+
+              <div class="formActions">
+                <button id="startBtn" class="btn">Start</button>
+                <button id="backToMenuFromTeams" class="btn secondary">Back</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- GAME -->
+        <section id="screenGame" class="screen hidden">
+          <div class="card">
+            <div class="prompt" id="prompt">Loading…</div>
+            <div class="hint" id="hint">
+              Take turns eliminating options. If you eliminate the target, you lose instantly.
+            </div>
+          </div>
+          <div class="gameGrid">
+            <div class="sideTeam" id="team1">Team 1</div>
+            <ol class="list" id="itemsList"></ol>
+            <div class="sideTeam" id="team2">Team 2</div>
+          </div>
+        </section>
+
+        <!-- EDITOR -->
+        <section id="screenEditor" class="screen hidden">
+          <div class="editorWrap">
+            <!-- TOP: centered round type -->
+            <div class="card editorTop">
+              <div class="formRow">
+                <label class="label" for="tplKind">Round type</label>
+                <select id="tplKind" class="select">
+                  <option value="rated">Rated: lowest rating loses</option>
+                  <option value="manual">Manual: host marks losing item</option>
+                </select>
+              </div>
+            </div>
+            <!-- BOTTOM: two columns -->
+            <div class="editor">
+              <div class="editorList">
+                <div class="editorListHeader">
+                  <div class="editorTitle">Rounds</div>
+                  <button id="addTemplateBtn" class="btn">+ Add</button>
+                </div>
+                <div id="templatesList" class="templatesList"></div>
+                <div class="editorFooter">
+                  <button id="backToMenuFromEditor" class="btn secondary">Back</button>
+                </div>
+              </div>
+              <div class="editorMain">
+                <div class="card">
+                  <div class="formRow">
+                    <label class="label" for="tplName">Round name</label>
+                    <input id="tplName" class="input" placeholder="e.g. Movies – Worst rated" />
+                  </div>
+                  <div class="formRow">
+                    <label class="label" for="tplPrompt">Prompt</label>
+                    <input id="tplPrompt" class="input" placeholder="e.g. Find the lowest-rated movie." />
+                  </div>
+                  <div class="itemsHeader">
+                    <div>Items</div>
+                    <div class="mutedSmall">Title + rating</div>
+                  </div>
+                  <div id="tplItems" class="tplItems"></div>
+                  <div class="formActions">
+                    <button id="saveTemplateBtn" class="btn">Save</button>
+                    <button id="deleteTemplateBtn" class="btn secondary">Delete</button>
+                  </div>
+                  <div id="editorStatus" class="status mutedSmall"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
 
       <div class="modal hidden" id="modal">

@@ -20,6 +20,7 @@ services:
       DATABASE_URL: postgresql://eliminator:eliminator@db:5432/eliminator
     volumes:
       - ./backend/app:/app/app:ro,Z
+
     depends_on:
       db:
         condition: service_healthy
@@ -35,7 +36,6 @@ services:
     volumes:
     - ./frontend:/usr/share/nginx/html:ro,Z
     - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro,Z
-
 
 volumes:
   pgdata:
