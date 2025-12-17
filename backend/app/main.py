@@ -313,7 +313,6 @@ def eliminate(round_id: uuid.UUID, req: EliminateRequest) -> Any:
                 """,
                 (current_team, req.item_id, round_id),
             )
-
             if req.item_id == target_item_id:
                 loser = int(current_team)
                 winner = 2 if loser == 1 else 1
@@ -327,7 +326,6 @@ def eliminate(round_id: uuid.UUID, req: EliminateRequest) -> Any:
                 )
                 conn.commit()
                 return _round_to_response(round_id)
-
             cur.execute(
                 """
                 SELECT COUNT(*)
@@ -337,10 +335,37 @@ def eliminate(round_id: uuid.UUID, req: EliminateRequest) -> Any:
                 (round_id,),
             )
             (remaining,) = cur.fetchone()
-
             if int(remaining) == 1:
+                # If the last remaining item is the target, it's a tie.
+                cur.execute(
+                    "SELECT id FROM items WHERE round_id = %s AND eliminated = false",
+                    (round_id,),
+                )
+                remaining_row = cur.fetchone()
+                remaining_item_id = remaining_row[0] if remaining_row else None
+                if remaining_item_id == target_item_id:
+                    cur.execute(
+                        """
+                        UPDATE rounds
+                        SET status='finished', winner_team=NULL, loser_team=NULL
+                        WHERE id=%s
+                        """,
+                        (round_id,),
+                    )
+                    conn.commit()
+                    return _round_to_response(round_id)
                 winner = int(current_team)
                 loser = 2 if winner == 1 else 1
+                cur.execute(
+                    """
+                    UPDATE rounds
+                    SET status='finished', winner_team=%s, loser_team=%s
+                    WHERE id=%s
+                    """,
+                    (winner, loser, round_id),
+                )
+                conn.commit()
+                return _round_to_response(round_id)
                 cur.execute(
                     """
                     UPDATE rounds

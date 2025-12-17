@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>The Eliminator’s Gambit</title>
+
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -36,18 +37,18 @@
           <div class="card">
             <div class="form">
               <div class="formRow">
-                <label class="label" for="team1Input">Team 1 name</label>
+                <label class="label" for="team1Input">Enter first team name</label>
                 <input id="team1Input" class="input" placeholder="Team 1" />
               </div>
 
               <div class="formRow">
-                <label class="label" for="team2Input">Team 2 name</label>
+                <label class="label" for="team2Input">Enter second team name</label>
                 <input id="team2Input" class="input" placeholder="Team 2" />
               </div>
 
               <div class="formRow">
-                <label class="label" for="roundSetSelect">Round set</label>
-                <select id="roundSetSelect" class="select"></select>
+                <label class="label">Pick from 1 to 10 rounds. Selection order defines play order.</label>
+                <div id="roundPickList" class="roundPickList"></div>
               </div>
 
               <div class="formActions">
@@ -65,14 +66,28 @@
             <div class="hint" id="hint">
               Take turns eliminating options. If you eliminate the target, you lose instantly.
             </div>
-            <div class="roundImageFrame" id="roundImageFrame">
-              <img id="roundImage" alt="Round image" />
+
+            <!-- Make it bright when it appears (no mutedSmall here) -->
+            <div class="roundStatus" id="roundStatus"></div>
+
+            <!-- Start hidden; JS will reveal when image_data exists -->
+            <div class="roundImageFrame roundImageFrame--game hidden" id="roundImageFrame">
+              <img id="roundImage" class="roundImage" alt="Round image" />
             </div>
           </div>
+
           <div class="gameGrid">
-            <div class="sideTeam" id="team1">Team 1</div>
+            <div class="sideTeam" id="team1Box">
+              <div class="teamName" id="team1">Team 1</div>
+              <div class="teamScore" id="score1">0</div>
+            </div>
+
             <ol class="list" id="itemsList"></ol>
-            <div class="sideTeam" id="team2">Team 2</div>
+
+            <div class="sideTeam" id="team2Box">
+              <div class="teamName" id="team2">Team 2</div>
+              <div class="teamScore" id="score2">0</div>
+            </div>
           </div>
         </section>
 
@@ -89,6 +104,7 @@
                 </select>
               </div>
             </div>
+
             <!-- BOTTOM: two columns -->
             <div class="editor">
               <div class="editorList">
@@ -96,37 +112,50 @@
                   <div class="editorTitle">Rounds</div>
                   <button id="addTemplateBtn" class="btn">+ Add</button>
                 </div>
+
                 <div id="templatesList" class="templatesList"></div>
+
                 <div class="editorFooter">
                   <button id="backToMenuFromEditor" class="btn secondary">Back</button>
                 </div>
               </div>
+
               <div class="editorMain">
                 <div class="card">
                   <div class="formRow">
                     <label class="label" for="tplName">Round name</label>
                     <input id="tplName" class="input" placeholder="e.g. Movies – Worst rated" />
                   </div>
+
                   <div class="formRow">
                     <label class="label" for="tplPrompt">Prompt</label>
                     <input id="tplPrompt" class="input" placeholder="e.g. Find the lowest-rated movie." />
                   </div>
+
                   <div class="formRow">
                     <label class="label" for="tplImage">Round image (optional)</label>
                     <input id="tplImage" class="input" type="file" accept="image/*" />
-                    <div id="tplImagePreviewWrap" class="roundImageFrame hidden" style="margin-top:10px;">
+
+                    <!-- app.js reads this if present -->
+                    <input id="tplImageData" type="hidden" />
+
+                    <div id="tplImagePreviewWrap" class="roundImageFrame roundImageFrame--preview hidden" style="margin-top:10px;">
                       <img id="tplImagePreview" class="roundImage" alt="Preview" />
                     </div>
                   </div>
+
                   <div class="itemsHeader">
                     <div>Items</div>
                     <div class="mutedSmall">Title + rating</div>
                   </div>
+
                   <div id="tplItems" class="tplItems"></div>
+
                   <div class="formActions">
                     <button id="saveTemplateBtn" class="btn">Save</button>
                     <button id="deleteTemplateBtn" class="btn secondary">Delete</button>
                   </div>
+
                   <div id="editorStatus" class="status mutedSmall"></div>
                 </div>
               </div>
