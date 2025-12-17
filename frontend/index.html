@@ -15,10 +15,7 @@
           <div class="title">The Eliminator’s Gambit</div>
           <div class="subtitle">Eliminate carefully. One wrong tap ends the round.</div>
         </div>
-
-        <div class="controls">
-          <button id="menuBtn" class="btn secondary hidden">Menu</button>
-        </div>
+        <div class="controls"></div>
       </header>
 
       <main class="main">
@@ -61,34 +58,32 @@
 
         <!-- GAME -->
         <section id="screenGame" class="screen hidden">
-          <div class="card">
-            <div class="prompt" id="prompt">Loading…</div>
-            <div class="hint" id="hint">
-              Take turns eliminating options. If you eliminate the target, you lose instantly.
-            </div>
-
-            <!-- Make it bright when it appears (no mutedSmall here) -->
-            <div class="roundStatus" id="roundStatus"></div>
-
-            <!-- Start hidden; JS will reveal when image_data exists -->
-            <div class="roundImageFrame roundImageFrame--game hidden" id="roundImageFrame">
-              <img id="roundImage" class="roundImage" alt="Round image" />
-            </div>
-          </div>
-
-          <div class="gameGrid">
+          <div class="gameLayout">
             <div class="sideTeam" id="team1Box">
               <div class="teamName" id="team1">Team 1</div>
               <div class="teamScore" id="score1">0</div>
             </div>
-
-            <ol class="list" id="itemsList"></ol>
-
+            <div class="card gameHeaderCard">
+              <button id="menuBtn" class="btn secondary hidden gameMenuBtn">Menu</button>
+              <div class="gameBrand">
+                <div class="title">The Eliminator’s Gambit</div>
+                <div class="subtitle">Eliminate carefully. One wrong tap ends the round.</div>
+              </div>
+              <div class="prompt" id="prompt">Loading…</div>
+              <div class="roundStatus mutedSmall" id="roundStatus"></div>
+              <div class="roundImageFrame" id="roundImageFrame">
+                <img id="roundImage" alt="Round image" />
+              </div>
+            </div>
             <div class="sideTeam" id="team2Box">
               <div class="teamName" id="team2">Team 2</div>
               <div class="teamScore" id="score2">0</div>
             </div>
+            <ol class="list answersGrid" id="itemsList"></ol>
           </div>
+        </section>
+
+          <ol class="list" id="itemsList"></ol>
         </section>
 
         <!-- EDITOR -->

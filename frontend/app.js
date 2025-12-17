@@ -30,6 +30,7 @@ function showScreen(name) {
   const screens = ["screenMenu", "screenTeams", "screenGame", "screenEditor"];
   for (const s of screens) el(s)?.classList.toggle("hidden", s !== name);
   el("menuBtn")?.classList.toggle("hidden", name === "screenMenu");
+  document.body.classList.toggle("modeGame", name === "screenGame");
 }
 
 function getTeamBox(team) {
