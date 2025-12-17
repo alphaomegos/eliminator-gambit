@@ -1,0 +1,6 @@
+ALTER TABLE templates
+  ADD COLUMN IF NOT EXISTS image_data TEXT;
+
+ALTER TABLE rounds
+  ADD COLUMN IF NOT EXISTS image_data TEXT;
+

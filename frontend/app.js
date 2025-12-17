@@ -10,6 +10,7 @@ let roundSet = localStorage.getItem("roundSet") || "builtin:movies";
 let templatesCache = [];
 let currentTemplateId = null;
 let currentTemplateKind = "rated";
+let currentTemplateImageData = null;
 
 const el = (id) => document.getElementById(id);
 
@@ -64,12 +65,42 @@ async function api(path, options = {}) {
   return res.json();
 }
 
+function setRoundImage(dataUrl) {
+  const frame = el("roundImageFrame");
+  const img = el("roundImage");
+  if (!frame || !img) return;
+
+  if (dataUrl) {
+    img.src = dataUrl;
+    frame.classList.remove("hidden");
+  } else {
+    img.removeAttribute("src");
+    frame.classList.add("hidden");
+  }
+}
+
+function setTemplateImagePreview(dataUrl) {
+  const wrap = el("tplImagePreviewWrap");
+  const img = el("tplImagePreview");
+  if (!wrap || !img) return;
+
+  if (dataUrl) {
+    img.src = dataUrl;
+    wrap.classList.remove("hidden");
+  } else {
+    img.removeAttribute("src");
+    wrap.classList.add("hidden");
+  }
+}
+
 function renderGame() {
   if (!round) return;
 
   el("prompt").textContent = round.prompt;
   updateTeamLabels();
   setActiveTeam(round.current_team);
+
+  setRoundImage(round.image_data || null);
 
   const list = el("itemsList");
   list.innerHTML = "";
@@ -95,7 +126,7 @@ function renderGame() {
     const meta = document.createElement("div");
     meta.className = "itemMeta";
 
-    // Backend already hides rating/secret_text until eliminated (or round finished).
+    // Backend hides rating/secret_text until eliminated (or round finished).
     if (item.rating != null) {
       meta.textContent = `Rating: ${item.rating}`;
     } else if (item.secret_text != null) {
@@ -140,7 +171,9 @@ function renderGame() {
 
     if (target) {
       if (target.rating != null) {
-        targetLine = `The target was: <b>${escapeHtml(target.title)}</b> (rating ${escapeHtml(target.rating)}).`;
+        targetLine = `The target was: <b>${escapeHtml(target.title)}</b> (rating ${escapeHtml(
+          target.rating
+        )}).`;
       } else if (target.secret_text != null) {
         targetLine = `The target was: <b>${escapeHtml(target.title)}</b>.<br/>Hidden info: <b>${escapeHtml(
           target.secret_text
@@ -195,9 +228,7 @@ function setItemsHeaderHint(kind) {
   if (!editor) return;
   const hint = editor.querySelector(".itemsHeader .mutedSmall");
   if (!hint) return;
-  hint.textContent = kind === "manual"
-    ? "Title + hidden info + target"
-    : "Title + rating";
+  hint.textContent = kind === "manual" ? "Title + hidden info + target" : "Title + rating";
 }
 
 function readTitlesOnlyFromForm() {
@@ -260,64 +291,34 @@ function renderRoundSetSelect() {
   for (const t of templatesCache) {
     const opt = document.createElement("option");
     opt.value = `template:${t.id}`;
-    const kind = t.kind ? ` (${t.kind})` : "";
     opt.textContent = `${t.name}`;
     s.appendChild(opt);
   }
 
+  // If selected value no longer exists, keep builtin.
   s.value = roundSet;
+  if (s.value !== roundSet) {
+    roundSet = "builtin:movies";
+    s.value = roundSet;
+  }
 }
 
 function ensureTemplateKindControl() {
   let kindSel = el("tplKind");
 
-  // If it's not in HTML (rare), create it near tplPrompt
-  if (!kindSel) {
-    const promptEl = el("tplPrompt");
-    if (!promptEl) return;
+  if (!kindSel) return;
 
-    const wrap = document.createElement("div");
-    wrap.className = "formRow";
-
-    const label = document.createElement("div");
-    label.className = "label";
-    label.textContent = "Round type";
-
-    kindSel = document.createElement("select");
-    kindSel.id = "tplKind";
-    kindSel.className = "select";
-    kindSel.style.width = "100%";
-
-    const o1 = document.createElement("option");
-    o1.value = "rated";
-    o1.textContent = "Rated (title + rating, lowest loses)";
-
-    const o2 = document.createElement("option");
-    o2.value = "manual";
-    o2.textContent = "Manual (title + hidden info + chosen target)";
-
-    kindSel.appendChild(o1);
-    kindSel.appendChild(o2);
-
-    wrap.appendChild(label);
-    wrap.appendChild(kindSel);
-
-    const parent = promptEl.parentElement;
-    if (parent && parent.parentElement) {
-      parent.parentElement.insertBefore(wrap, parent);
-    } else {
-      promptEl.insertAdjacentElement("beforebegin", wrap);
-    }
+  if (kindSel.dataset.bound === "1") {
+    currentTemplateKind = kindSel.value || currentTemplateKind || "rated";
+    setItemsHeaderHint(currentTemplateKind);
+    return;
   }
 
-  // Bind change handler even if tplKind existed in HTML
-  if (kindSel.dataset.bound === "1") return;
   kindSel.dataset.bound = "1";
 
   kindSel.addEventListener("change", () => {
     currentTemplateKind = kindSel.value || "rated";
 
-    // Preserve already typed titles when switching kind
     const base = readTitlesOnlyFromForm();
     const seedItems =
       currentTemplateKind === "manual"
@@ -331,10 +332,9 @@ function ensureTemplateKindControl() {
   setItemsHeaderHint(currentTemplateKind);
 }
 
-
 function getKindFromUI() {
   const k = el("tplKind");
-  return (k && k.value) ? k.value : currentTemplateKind || "rated";
+  return k && k.value ? k.value : currentTemplateKind || "rated";
 }
 
 function normalizeItemsTo11(items, kind) {
@@ -354,10 +354,7 @@ function normalizeItemsTo11(items, kind) {
     }
   }
   while (rows.length < 11) {
-    rows.push(kind === "manual"
-      ? { title: "", secret_text: "", is_target: false }
-      : { title: "", rating: "" }
-    );
+    rows.push(kind === "manual" ? { title: "", secret_text: "", is_target: false } : { title: "", rating: "" });
   }
   return rows.slice(0, 11);
 }
@@ -381,9 +378,7 @@ function renderTemplateItemsForm(items, kind) {
     // Override columns without touching CSS:
     row.style.display = "grid";
     row.style.gap = "10px";
-    row.style.gridTemplateColumns = (kind === "manual")
-      ? "1fr 1fr 44px"
-      : "1fr 140px";
+    row.style.gridTemplateColumns = kind === "manual" ? "1fr 1fr 44px" : "1fr 140px";
 
     const title = document.createElement("input");
     title.className = "input";
@@ -410,7 +405,6 @@ function renderTemplateItemsForm(items, kind) {
       target.dataset.field = "is_target";
       target.title = "Target (losing) item";
 
-      // If user clicks radio, uncheck other rows automatically (native radio behavior)
       row.appendChild(secret);
       row.appendChild(target);
     } else {
@@ -426,16 +420,6 @@ function renderTemplateItemsForm(items, kind) {
 
     box.appendChild(row);
   });
-}
-
-function readTemplateItemsFromFormSafe() {
-  try {
-    return readTemplateItemsFromForm(getKindFromUI());
-  } catch (_) {
-    // If form is temporarily invalid while typing, keep current visual rows.
-    // Return empty to let render rebuild minimal layout.
-    return [];
-  }
 }
 
 function readTemplateItemsFromForm(kind) {
@@ -467,12 +451,8 @@ function readTemplateItemsFromForm(kind) {
   for (const r of rows) {
     const title = String(r.title || "").trim();
 
-    // Ignore fully empty rows
     const hasAny =
-      title ||
-      String(r.rating || "").trim() ||
-      String(r.secret_text || "").trim() ||
-      !!r.is_target;
+      title || String(r.rating || "").trim() || String(r.secret_text || "").trim() || !!r.is_target;
 
     if (!hasAny) continue;
 
@@ -497,7 +477,7 @@ let templatesLoadedAt = 0;
 
 async function loadTemplates({ force = false } = {}) {
   const now = Date.now();
-  if (!force && templatesCache.length && (now - templatesLoadedAt) < 30000) {
+  if (!force && templatesCache.length && now - templatesLoadedAt < 30000) {
     renderTemplatesList();
     renderRoundSetSelect();
     return;
@@ -515,7 +495,6 @@ async function loadTemplates({ force = false } = {}) {
   renderRoundSetSelect();
 }
 
-
 async function selectTemplate(id) {
   setEditorStatus("");
   currentTemplateId = id;
@@ -531,6 +510,12 @@ async function selectTemplate(id) {
   const k = el("tplKind");
   if (k) k.value = currentTemplateKind;
 
+  currentTemplateImageData = tpl.image_data || null;
+  setTemplateImagePreview(currentTemplateImageData);
+
+  const fileInp = el("tplImage");
+  if (fileInp) fileInp.value = "";
+
   renderTemplateItemsForm(tpl.items || [], currentTemplateKind);
 }
 
@@ -543,6 +528,12 @@ function clearEditorForm() {
   currentTemplateKind = "rated";
   const k = el("tplKind");
   if (k) k.value = "rated";
+
+  currentTemplateImageData = null;
+  setTemplateImagePreview(null);
+
+  const fileInp = el("tplImage");
+  if (fileInp) fileInp.value = "";
 
   renderTemplateItemsForm([], "rated");
   renderTemplatesList();
@@ -568,7 +559,7 @@ async function saveTemplate() {
     if (targets.length !== 1) throw new Error("Manual round: select exactly 1 target item.");
   }
 
-  const body = { kind, name, prompt, items };
+  const body = { kind, name, prompt, items, image_data: currentTemplateImageData };
 
   if (!currentTemplateId) {
     const created = await api("/api/templates", {
@@ -583,7 +574,7 @@ async function saveTemplate() {
     });
   }
 
-  await loadTemplates();
+  await loadTemplates({ force: true });
   if (currentTemplateId) await selectTemplate(currentTemplateId);
   setEditorStatus("Saved.");
 }
@@ -592,7 +583,7 @@ async function deleteTemplate() {
   if (!currentTemplateId) return;
   await api(`/api/templates/${currentTemplateId}`, { method: "DELETE" });
   currentTemplateId = null;
-  await loadTemplates();
+  await loadTemplates({ force: true });
   clearEditorForm();
   setEditorStatus("Deleted.");
 }
@@ -612,18 +603,23 @@ function wireUI() {
     el("team1Input").value = teamNames[1];
     el("team2Input").value = teamNames[2];
     showScreen("screenTeams");
-    loadTemplates().catch(() => {});
-    el("roundSetSelect").value = roundSet;
-});
+
+    loadTemplates()
+      .then(() => {
+        el("roundSetSelect").value = roundSet;
+      })
+      .catch(() => {});
+  });
 
   on("goEditRounds", "click", () => {
     showScreen("screenEditor");
     clearEditorForm();
     setEditorStatus("Loading rounds…");
+
     loadTemplates()
       .then(() => setEditorStatus(""))
       .catch((e) => setEditorStatus(String(e.message || e)));
-});
+  });
 
   on("backToMenuFromTeams", "click", () => showScreen("screenMenu"));
   on("backToMenuFromEditor", "click", () => showScreen("screenMenu"));
@@ -646,6 +642,38 @@ function wireUI() {
     clearEditorForm();
     ensureTemplateKindControl();
     setEditorStatus("Fill the form and click Save.");
+  });
+
+  on("tplImage", "change", async (e) => {
+    try {
+      const inp = e.target;
+      const file = inp.files && inp.files[0];
+
+      if (!file) {
+        currentTemplateImageData = null;
+        setTemplateImagePreview(null);
+        return;
+      }
+
+      if (file.size > 1_500_000) {
+        inp.value = "";
+        currentTemplateImageData = null;
+        setTemplateImagePreview(null);
+        throw new Error("Image is too large (max ~1.5MB).");
+      }
+
+      const dataUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+
+      currentTemplateImageData = String(dataUrl);
+      setTemplateImagePreview(currentTemplateImageData);
+    } catch (err) {
+      setEditorStatus(String(err.message || err));
+    }
   });
 
   on("saveTemplateBtn", "click", async () => {
@@ -686,5 +714,4 @@ function wireUI() {
   showScreen("screenMenu");
   loadTemplates().catch(() => {});
 })();
-
 

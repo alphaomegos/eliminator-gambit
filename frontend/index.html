@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>The Eliminator’s Gambit</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -64,6 +65,9 @@
             <div class="hint" id="hint">
               Take turns eliminating options. If you eliminate the target, you lose instantly.
             </div>
+            <div class="roundImageFrame" id="roundImageFrame">
+              <img id="roundImage" alt="Round image" />
+            </div>
           </div>
           <div class="gameGrid">
             <div class="sideTeam" id="team1">Team 1</div>
@@ -106,6 +110,13 @@
                   <div class="formRow">
                     <label class="label" for="tplPrompt">Prompt</label>
                     <input id="tplPrompt" class="input" placeholder="e.g. Find the lowest-rated movie." />
+                  </div>
+                  <div class="formRow">
+                    <label class="label" for="tplImage">Round image (optional)</label>
+                    <input id="tplImage" class="input" type="file" accept="image/*" />
+                    <div id="tplImagePreviewWrap" class="roundImageFrame hidden" style="margin-top:10px;">
+                      <img id="tplImagePreview" class="roundImage" alt="Preview" />
+                    </div>
                   </div>
                   <div class="itemsHeader">
                     <div>Items</div>

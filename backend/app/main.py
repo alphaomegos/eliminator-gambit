@@ -45,6 +45,7 @@ class RoundOut(BaseModel):
     winner_team: Optional[int] = None
     loser_team: Optional[int] = None
     items: List[ItemOut]
+    image_data: Optional[str] = None
 
 
 # =========================
@@ -65,6 +66,7 @@ class TemplateCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     prompt: str = Field(min_length=1, max_length=300)
     items: conlist(TemplateItemIn, min_length=2)
+    image_data: Optional[str] = None
 
 
 class TemplateSummary(BaseModel):
@@ -81,6 +83,7 @@ class TemplateOut(BaseModel):
     prompt: str
     kind: str
     items: List[TemplateItemIn]
+    image_data: Optional[str] = None
 
 
 class CreateRoundFromTemplateRequest(BaseModel):
@@ -145,7 +148,7 @@ def _round_to_response(round_id: uuid.UUID) -> RoundOut:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, category, prompt, current_team, status, target_item_id, winner_team, loser_team
+                SELECT id, category, prompt, current_team, status, target_item_id, winner_team, loser_team, image_data
                 FROM rounds
                 WHERE id = %s
                 """,
@@ -164,6 +167,7 @@ def _round_to_response(round_id: uuid.UUID) -> RoundOut:
                 target_item_id,
                 winner_team,
                 loser_team,
+                image_data,
             ) = row
 
             cur.execute(
@@ -198,11 +202,12 @@ def _round_to_response(round_id: uuid.UUID) -> RoundOut:
         id=rid,
         category=category,
         prompt=prompt,
-        current_team=current_team,
-        status=status,
-        winner_team=winner_team,
-        loser_team=loser_team,
+        current_team=int(current_team),
+        status=str(status),
+        winner_team=int(winner_team) if winner_team is not None else None,
+        loser_team=int(loser_team) if loser_team is not None else None,
         items=items,
+        image_data=image_data,
     )
 
 
@@ -369,7 +374,7 @@ def list_templates() -> Dict[str, List[TemplateSummary]]:
                 SELECT t.id, t.name, t.prompt, t.kind, COUNT(i.id) AS item_count
                 FROM templates t
                 LEFT JOIN template_items i ON i.template_id = t.id
-                GROUP BY t.id, t.kind
+                GROUP BY t.id, t.name, t.prompt, t.kind
                 ORDER BY t.updated_at DESC, t.created_at DESC
                 """
             )
@@ -393,7 +398,10 @@ def list_templates() -> Dict[str, List[TemplateSummary]]:
 def get_template(template_id: uuid.UUID) -> Any:
     with db_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, name, prompt, kind FROM templates WHERE id=%s", (template_id,))
+            cur.execute(
+                "SELECT id, name, prompt, kind, image_data FROM templates WHERE id=%s",
+                (template_id,),
+            )
             tpl = cur.fetchone()
             if not tpl:
                 raise HTTPException(status_code=404, detail="Template not found")
@@ -414,9 +422,10 @@ def get_template(template_id: uuid.UUID) -> Any:
         name=tpl[1],
         prompt=tpl[2],
         kind=tpl[3],
+        image_data=tpl[4],
         items=[
-            TemplateItemIn(title=t, rating=r, secret_text=s, is_target=bool(it))
-            for (t, r, s, it) in items
+            TemplateItemIn(title=t, rating=r, secret_text=s, is_target=bool(is_target))
+            for (t, r, s, is_target) in items
         ],
     )
 
@@ -428,8 +437,12 @@ def create_template(body: TemplateCreate) -> Any:
     with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO templates (name, prompt, kind) VALUES (%s, %s, %s) RETURNING id",
-                (body.name.strip(), body.prompt.strip(), body.kind),
+                """
+                INSERT INTO templates (name, prompt, kind, image_data)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id
+                """,
+                (body.name.strip(), body.prompt.strip(), body.kind, body.image_data),
             )
             (tpl_id,) = cur.fetchone()
 
@@ -462,8 +475,12 @@ def update_template(template_id: uuid.UUID, body: TemplateCreate) -> Any:
                 raise HTTPException(status_code=404, detail="Template not found")
 
             cur.execute(
-                "UPDATE templates SET name=%s, prompt=%s, kind=%s WHERE id=%s",
-                (body.name.strip(), body.prompt.strip(), body.kind, template_id),
+                """
+                UPDATE templates
+                SET name=%s, prompt=%s, kind=%s, image_data=%s
+                WHERE id=%s
+                """,
+                (body.name.strip(), body.prompt.strip(), body.kind, body.image_data, template_id),
             )
 
             cur.execute("DELETE FROM template_items WHERE template_id=%s", (template_id,))
@@ -502,61 +519,57 @@ def create_round_from_template(req: CreateRoundFromTemplateRequest) -> Any:
     with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, name, prompt, kind FROM templates WHERE id=%s",
+                "SELECT id, name, prompt, kind, image_data FROM templates WHERE id=%s",
                 (req.template_id,),
             )
             tpl = cur.fetchone()
             if not tpl:
                 raise HTTPException(status_code=404, detail="Template not found")
 
-            tpl_id, name, prompt, kind = tpl
+            tpl_id, name, prompt, kind, image_data = tpl
 
             cur.execute(
                 """
                 SELECT title, rating, secret_text, is_target
                 FROM template_items
                 WHERE template_id=%s
+                ORDER BY title ASC
                 """,
                 (tpl_id,),
             )
             rows = cur.fetchall()
 
-    if len(rows) < 2:
-        raise HTTPException(status_code=400, detail="Template must have at least 2 items")
+    items_obj = [
+        TemplateItemIn(title=t, rating=r, secret_text=s, is_target=bool(is_target))
+        for (t, r, s, is_target) in rows
+    ]
+    _validate_template(kind, items_obj)
 
+    # Determine target (losing) item
     if kind == "rated":
-        # rating must exist (validation guarantees)
-        min_idx, (target_title, target_rating, _, _) = min(enumerate(rows), key=lambda p: p[1][1])
-    elif kind == "manual":
-        targets = [(i, r) for i, r in enumerate(rows) if bool(r[3])]
-        if len(targets) != 1:
-            raise HTTPException(status_code=400, detail="Manual round: exactly 1 target must be set")
-        min_idx, (target_title, _, _, _) = targets[0]
-        target_rating = None
+        target_title = min(rows, key=lambda x: x[1])[0]  # rating is x[1]
+        target_is_manual = False
     else:
-        raise HTTPException(status_code=400, detail="Unknown template kind")
+        target_title = [r[0] for r in rows if bool(r[3])][0]  # is_target is x[3]
+        target_is_manual = True
 
     with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO rounds (category, prompt, current_team, status, target_item_id)
-                VALUES (%s, %s, 1, 'active', '00000000-0000-0000-0000-000000000000')
+                INSERT INTO rounds (category, prompt, image_data, current_team, status, target_item_id)
+                VALUES (%s, %s, %s, 1, 'active', '00000000-0000-0000-0000-000000000000')
                 RETURNING id
                 """,
-                (str(name), str(prompt)),
+                (str(name), str(prompt), image_data),
             )
             (round_id,) = cur.fetchone()
 
             target_item_id: Optional[uuid.UUID] = None
 
-            for idx, (title, rating, secret_text, is_target) in enumerate(rows):
-                if kind == "rated":
-                    ins_rating = rating
-                    ins_secret = None
-                else:
-                    ins_rating = None
-                    ins_secret = secret_text
+            for (title, rating, secret_text, is_target) in rows:
+                ins_rating = rating if kind == "rated" else None
+                ins_secret = (secret_text if kind == "manual" else None)
 
                 cur.execute(
                     """
@@ -569,7 +582,7 @@ def create_round_from_template(req: CreateRoundFromTemplateRequest) -> Any:
                 (iid,) = cur.fetchone()
 
                 if kind == "rated":
-                    if idx == min_idx:
+                    if title == target_title:
                         target_item_id = iid
                 else:
                     if bool(is_target):
@@ -591,4 +604,3 @@ def create_round_from_template(req: CreateRoundFromTemplateRequest) -> Any:
 @app.exception_handler(HTTPException)
 def http_exception_handler(_, exc: HTTPException) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-
