@@ -34,12 +34,14 @@ class ItemOut(BaseModel):
     rating: Optional[Decimal] = None
     secret_text: Optional[str] = None
     is_target: Optional[bool] = None
+    image_data: Optional[str] = None
 
 
 class RoundOut(BaseModel):
     id: uuid.UUID
     category: str
     prompt: str
+    kind: str
     current_team: int
     status: str
     winner_team: Optional[int] = None
@@ -51,14 +53,15 @@ class RoundOut(BaseModel):
 # =========================
 # Templates / round sets models
 # =========================
-TemplateKind = Literal["rated", "manual"]
+TemplateKind = Literal["rated", "manual", "carousel"]
 
 
 class TemplateItemIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     rating: Optional[Decimal] = None          # rated
-    secret_text: Optional[str] = None         # manual (hidden info)
-    is_target: bool = False                   # manual (exactly 1)
+    secret_text: Optional[str] = None         # manual/carousel (hidden info)
+    is_target: bool = False                   # manual/carousel (exactly 1)
+    image_data: Optional[str] = None          # per-item image (base64 or data URL)
 
 
 class TemplateCreate(BaseModel):
@@ -112,7 +115,7 @@ def categories() -> Dict[str, List[str]]:
 # Helpers
 # =========================
 def _validate_template(kind: str, items: List[TemplateItemIn]) -> None:
-    if kind not in ("rated", "manual"):
+    if kind not in ("rated", "manual", "carousel"):
         raise HTTPException(status_code=400, detail="Unknown template kind")
 
     if len(items) < 2:
@@ -127,20 +130,32 @@ def _validate_template(kind: str, items: List[TemplateItemIn]) -> None:
                 )
         return
 
-    # manual
     targets = [it for it in items if bool(it.is_target)]
     if len(targets) != 1:
         raise HTTPException(
             status_code=400,
-            detail="Manual round: exactly 1 item must be marked as target",
+            detail="Manual/carousel round: exactly 1 item must be marked as target",
         )
 
     for it in items:
         if not (it.secret_text and it.secret_text.strip()):
             raise HTTPException(
                 status_code=400,
-                detail="Manual round: each item must have hidden info (secret_text)",
+                detail="Manual/carousel round: each item must have hidden info (secret_text)",
             )
+
+    if kind == "carousel":
+        for it in items:
+            if not (it.image_data and it.image_data.strip()):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Carousel round: each item must have image_data",
+                )
+            if it.rating is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Carousel round: rating must be null",
+                )
 
 
 def _round_to_response(round_id: uuid.UUID) -> RoundOut:
@@ -148,7 +163,7 @@ def _round_to_response(round_id: uuid.UUID) -> RoundOut:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, category, prompt, current_team, status, target_item_id, winner_team, loser_team, image_data
+                SELECT id, category, prompt, kind, current_team, status, target_item_id, winner_team, loser_team, image_data
                 FROM rounds
                 WHERE id = %s
                 """,
@@ -162,6 +177,7 @@ def _round_to_response(round_id: uuid.UUID) -> RoundOut:
                 rid,
                 category,
                 prompt,
+                kind,
                 current_team,
                 status,
                 target_item_id,
@@ -172,7 +188,7 @@ def _round_to_response(round_id: uuid.UUID) -> RoundOut:
 
             cur.execute(
                 """
-                SELECT id, title, eliminated, rating, secret_text, eliminated_by_team
+                SELECT id, title, eliminated, rating, secret_text, eliminated_by_team, image_data
                 FROM items
                 WHERE round_id = %s
                 ORDER BY title ASC
@@ -184,8 +200,12 @@ def _round_to_response(round_id: uuid.UUID) -> RoundOut:
     reveal_all = status == "finished"
 
     items: List[ItemOut] = []
-    for iid, title, eliminated, rating, secret_text, eliminated_by_team in items_rows:
+    for iid, title, eliminated, rating, secret_text, eliminated_by_team, item_image_data in items_rows:
         show_hidden = reveal_all or bool(eliminated)
+
+        # Carousel reveals images during active play.
+        show_image = (str(kind) == "carousel") or show_hidden
+
         items.append(
             ItemOut(
                 id=iid,
@@ -194,6 +214,7 @@ def _round_to_response(round_id: uuid.UUID) -> RoundOut:
                 eliminated_by_team=int(eliminated_by_team) if eliminated_by_team is not None else None,
                 rating=rating if (show_hidden and rating is not None) else None,
                 secret_text=secret_text if (show_hidden and secret_text is not None) else None,
+                image_data=item_image_data if (show_image and item_image_data is not None) else None,
                 is_target=(iid == target_item_id) if reveal_all else None,
             )
         )
@@ -202,6 +223,7 @@ def _round_to_response(round_id: uuid.UUID) -> RoundOut:
         id=rid,
         category=category,
         prompt=prompt,
+        kind=str(kind),
         current_team=int(current_team),
         status=str(status),
         winner_team=int(winner_team) if winner_team is not None else None,
@@ -232,8 +254,8 @@ def create_round(req: CreateRoundRequest) -> Any:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO rounds (category, prompt, current_team, status, target_item_id)
-                VALUES (%s, %s, 1, 'active', '00000000-0000-0000-0000-000000000000')
+                INSERT INTO rounds (category, prompt, kind, current_team, status, target_item_id)
+                VALUES (%s, %s, 'rated', 1, 'active', '00000000-0000-0000-0000-000000000000')
                 RETURNING id
                 """,
                 (category, prompt),
@@ -313,6 +335,8 @@ def eliminate(round_id: uuid.UUID, req: EliminateRequest) -> Any:
                 """,
                 (current_team, req.item_id, round_id),
             )
+
+            # Picked the target -> immediate loss for current team.
             if req.item_id == target_item_id:
                 loser = int(current_team)
                 winner = 2 if loser == 1 else 1
@@ -326,6 +350,8 @@ def eliminate(round_id: uuid.UUID, req: EliminateRequest) -> Any:
                 )
                 conn.commit()
                 return _round_to_response(round_id)
+
+            # Check remaining items
             cur.execute(
                 """
                 SELECT COUNT(*)
@@ -335,14 +361,15 @@ def eliminate(round_id: uuid.UUID, req: EliminateRequest) -> Any:
                 (round_id,),
             )
             (remaining,) = cur.fetchone()
+
             if int(remaining) == 1:
-                # If the last remaining item is the target, it's a tie.
                 cur.execute(
                     "SELECT id FROM items WHERE round_id = %s AND eliminated = false",
                     (round_id,),
                 )
                 remaining_row = cur.fetchone()
                 remaining_item_id = remaining_row[0] if remaining_row else None
+
                 if remaining_item_id == target_item_id:
                     cur.execute(
                         """
@@ -354,18 +381,9 @@ def eliminate(round_id: uuid.UUID, req: EliminateRequest) -> Any:
                     )
                     conn.commit()
                     return _round_to_response(round_id)
+
                 winner = int(current_team)
                 loser = 2 if winner == 1 else 1
-                cur.execute(
-                    """
-                    UPDATE rounds
-                    SET status='finished', winner_team=%s, loser_team=%s
-                    WHERE id=%s
-                    """,
-                    (winner, loser, round_id),
-                )
-                conn.commit()
-                return _round_to_response(round_id)
                 cur.execute(
                     """
                     UPDATE rounds
@@ -382,6 +400,7 @@ def eliminate(round_id: uuid.UUID, req: EliminateRequest) -> Any:
                 "UPDATE rounds SET current_team=%s WHERE id=%s",
                 (next_team, round_id),
             )
+
         conn.commit()
 
     return _round_to_response(round_id)
@@ -433,7 +452,7 @@ def get_template(template_id: uuid.UUID) -> Any:
 
             cur.execute(
                 """
-                SELECT title, rating, secret_text, is_target
+                SELECT title, rating, secret_text, is_target, image_data
                 FROM template_items
                 WHERE template_id=%s
                 ORDER BY title ASC
@@ -449,8 +468,14 @@ def get_template(template_id: uuid.UUID) -> Any:
         kind=tpl[3],
         image_data=tpl[4],
         items=[
-            TemplateItemIn(title=t, rating=r, secret_text=s, is_target=bool(is_target))
-            for (t, r, s, is_target) in items
+            TemplateItemIn(
+                title=t,
+                rating=r,
+                secret_text=s,
+                is_target=bool(is_target),
+                image_data=img,
+            )
+            for (t, r, s, is_target, img) in items
         ],
     )
 
@@ -472,16 +497,19 @@ def create_template(body: TemplateCreate) -> Any:
             (tpl_id,) = cur.fetchone()
 
             for it in body.items:
+                is_manual_like = body.kind in ("manual", "carousel")
+
                 rating = it.rating if body.kind == "rated" else None
-                secret_text = (it.secret_text.strip() if it.secret_text else None) if body.kind == "manual" else None
-                is_target = bool(it.is_target) if body.kind == "manual" else False
+                secret_text = (it.secret_text.strip() if it.secret_text else None) if is_manual_like else None
+                is_target = bool(it.is_target) if is_manual_like else False
+                item_image = it.image_data
 
                 cur.execute(
                     """
-                    INSERT INTO template_items (template_id, title, rating, secret_text, is_target)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO template_items (template_id, title, rating, secret_text, is_target, image_data)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     """,
-                    (tpl_id, it.title.strip(), rating, secret_text, is_target),
+                    (tpl_id, it.title.strip(), rating, secret_text, is_target, item_image),
                 )
 
         conn.commit()
@@ -509,17 +537,21 @@ def update_template(template_id: uuid.UUID, body: TemplateCreate) -> Any:
             )
 
             cur.execute("DELETE FROM template_items WHERE template_id=%s", (template_id,))
+
             for it in body.items:
+                is_manual_like = body.kind in ("manual", "carousel")
+
                 rating = it.rating if body.kind == "rated" else None
-                secret_text = (it.secret_text.strip() if it.secret_text else None) if body.kind == "manual" else None
-                is_target = bool(it.is_target) if body.kind == "manual" else False
+                secret_text = (it.secret_text.strip() if it.secret_text else None) if is_manual_like else None
+                is_target = bool(it.is_target) if is_manual_like else False
+                item_image = it.image_data
 
                 cur.execute(
                     """
-                    INSERT INTO template_items (template_id, title, rating, secret_text, is_target)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO template_items (template_id, title, rating, secret_text, is_target, image_data)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     """,
-                    (template_id, it.title.strip(), rating, secret_text, is_target),
+                    (template_id, it.title.strip(), rating, secret_text, is_target, item_image),
                 )
 
         conn.commit()
@@ -537,7 +569,7 @@ def delete_template(template_id: uuid.UUID) -> Dict[str, str]:
 
 
 # =========================
-# Create runtime round from template (rated/manual)
+# Create runtime round from template (rated/manual/carousel)
 # =========================
 @app.post("/api/rounds/from-template", response_model=RoundOut)
 def create_round_from_template(req: CreateRoundFromTemplateRequest) -> Any:
@@ -555,7 +587,7 @@ def create_round_from_template(req: CreateRoundFromTemplateRequest) -> Any:
 
             cur.execute(
                 """
-                SELECT title, rating, secret_text, is_target
+                SELECT title, rating, secret_text, is_target, image_data
                 FROM template_items
                 WHERE template_id=%s
                 ORDER BY title ASC
@@ -565,48 +597,53 @@ def create_round_from_template(req: CreateRoundFromTemplateRequest) -> Any:
             rows = cur.fetchall()
 
     items_obj = [
-        TemplateItemIn(title=t, rating=r, secret_text=s, is_target=bool(is_target))
-        for (t, r, s, is_target) in rows
+        TemplateItemIn(
+            title=t,
+            rating=r,
+            secret_text=s,
+            is_target=bool(is_target),
+            image_data=img,
+        )
+        for (t, r, s, is_target, img) in rows
     ]
-    _validate_template(kind, items_obj)
+    _validate_template(str(kind), items_obj)
 
-    # Determine target (losing) item
-    if kind == "rated":
-        target_title = min(rows, key=lambda x: x[1])[0]  # rating is x[1]
-        target_is_manual = False
+    if str(kind) == "rated":
+        target_title = min(rows, key=lambda x: x[1])[0]
     else:
-        target_title = [r[0] for r in rows if bool(r[3])][0]  # is_target is x[3]
-        target_is_manual = True
+        target_title = [r[0] for r in rows if bool(r[3])][0]
 
     with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO rounds (category, prompt, image_data, current_team, status, target_item_id)
-                VALUES (%s, %s, %s, 1, 'active', '00000000-0000-0000-0000-000000000000')
+                INSERT INTO rounds (category, prompt, kind, image_data, current_team, status, target_item_id)
+                VALUES (%s, %s, %s, %s, 1, 'active', '00000000-0000-0000-0000-000000000000')
                 RETURNING id
                 """,
-                (str(name), str(prompt), image_data),
+                (str(name), str(prompt), str(kind), image_data),
             )
             (round_id,) = cur.fetchone()
 
             target_item_id: Optional[uuid.UUID] = None
+            kind_s = str(kind)
 
-            for (title, rating, secret_text, is_target) in rows:
-                ins_rating = rating if kind == "rated" else None
-                ins_secret = (secret_text if kind == "manual" else None)
+            for (title, rating, secret_text, is_target, item_image_data) in rows:
+                ins_rating = rating if kind_s == "rated" else None
+                ins_secret = secret_text if kind_s in ("manual", "carousel") else None
+                ins_image = item_image_data if item_image_data else None
 
                 cur.execute(
                     """
-                    INSERT INTO items (round_id, title, rating, secret_text, eliminated)
-                    VALUES (%s, %s, %s, %s, false)
+                    INSERT INTO items (round_id, title, rating, secret_text, image_data, eliminated)
+                    VALUES (%s, %s, %s, %s, %s, false)
                     RETURNING id
                     """,
-                    (round_id, title, ins_rating, ins_secret),
+                    (round_id, title, ins_rating, ins_secret, ins_image),
                 )
                 (iid,) = cur.fetchone()
 
-                if kind == "rated":
+                if kind_s == "rated":
                     if title == target_title:
                         target_item_id = iid
                 else:
@@ -629,3 +666,4 @@ def create_round_from_template(req: CreateRoundFromTemplateRequest) -> Any:
 @app.exception_handler(HTTPException)
 def http_exception_handler(_, exc: HTTPException) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+

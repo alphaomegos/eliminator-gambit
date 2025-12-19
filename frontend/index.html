@@ -64,6 +64,7 @@
               <div class="teamScore" id="score1">0</div>
             </div>
             <div class="card gameHeaderCard">
+              <button id="nextRoundBtn" class="btn success hidden gameNextBtn" type="button">Next round</button>
               <button id="menuBtn" class="btn secondary hidden gameMenuBtn">Menu</button>
               <div class="gameBrand">
                 <div class="title">The Eliminator’s Gambit</div>
@@ -71,20 +72,27 @@
               </div>
               <div class="prompt" id="prompt">Loading…</div>
               <div class="roundStatus mutedSmall" id="roundStatus"></div>
-              <div class="roundImageFrame" id="roundImageFrame">
-                <img id="roundImage" alt="Round image" />
-              </div>
             </div>
             <div class="sideTeam" id="team2Box">
               <div class="teamName" id="team2">Team 2</div>
               <div class="teamScore" id="score2">0</div>
             </div>
+            <div class="roundMedia" id="roundMedia">
+              <div class="roundImageFrame hidden" id="roundImageFrame">
+                <img id="roundImage" alt="Round image" />
+              </div>
+              <div class="carouselFrame hidden" id="carouselFrame">
+                <button id="carouselPrev" class="btn secondary carouselBtn" aria-label="Previous">‹</button>
+                <div class="carouselViewport" id="carouselViewport">
+                  <div class="carouselTrack" id="carouselTrack"></div>
+                </div>
+                <button id="carouselNext" class="btn secondary carouselBtn" aria-label="Next">›</button>
+              </div>
+            </div>
             <ol class="list answersGrid" id="itemsList"></ol>
           </div>
         </section>
 
-          <ol class="list" id="itemsList"></ol>
-        </section>
 
         <!-- EDITOR -->
         <section id="screenEditor" class="screen hidden">
@@ -96,6 +104,7 @@
                 <select id="tplKind" class="select">
                   <option value="rated">Rated: lowest rating loses</option>
                   <option value="manual">Manual: host marks losing item</option>
+                  <option value="carousel">Carousel: images + title (manual target)</option>
                 </select>
               </div>
             </div>
@@ -166,6 +175,18 @@
           <div class="modalActions">
             <button class="btn" id="modalNewRound">Start another</button>
             <button class="btn secondary" id="modalClose">Close</button>
+          </div>
+        </div>
+        <div class="modal hidden" id="itemModal">
+          <div class="modalCard itemModalCard">
+            <div class="modalTitle" id="itemModalTitle"></div>
+            <div class="itemModalImageWrap">
+              <img id="itemModalImage" alt="Item image" />
+            </div>
+            <div class="modalText" id="itemModalText"></div>
+            <div class="modalActions">
+              <button class="btn success" id="itemModalClose" type="button">Close</button>
+            </div>
           </div>
         </div>
       </div>

@@ -1,4 +1,50 @@
 let round = null;
+let carouselIndex = 0;
+
+let carouselItems = [];
+
+function initCarouselControls(onPickItem) {
+  const prev = document.getElementById("carouselPrev");
+  const next = document.getElementById("carouselNext");
+  const track = document.getElementById("carouselTrack");
+
+  if (!prev || !next || !track) {
+    console.warn("[carousel] missing controls", { prev: !!prev, next: !!next, track: !!track });
+    return;
+  }
+
+  prev.addEventListener("click", (e) => {
+    e.preventDefault();
+    carouselIndex -= 1;
+    updateCarouselTransform();
+  });
+
+  next.addEventListener("click", (e) => {
+    e.preventDefault();
+    carouselIndex += 1;
+    updateCarouselTransform();
+  });
+
+  window.addEventListener("resize", () => {
+    if (carouselItems.length) updateCarouselTransform();
+  });
+
+  track.addEventListener("click", async (e) => {
+    const nextBtn = e.target.closest('[data-action="next-round"]');
+    if (nextBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      await goNextRound();
+      return;
+    }
+
+    const btn = e.target.closest(".carouselItem");
+    if (!btn) return;
+    const itemId = btn.dataset.itemId;
+    if (itemId) onPickItem(itemId);
+  });
+}
+
 
 let teamNames = {
   1: localStorage.getItem("team1") || "Team 1",
@@ -19,6 +65,42 @@ let scores = { 1: 0, 2: 0 };
 
 const el = (id) => document.getElementById(id);
 
+
+function ensureNextRoundBtn() {
+  const btn = el("nextRoundBtn");
+  if (!btn) return null;
+
+  if (!btn.dataset.bound) {
+    btn.dataset.bound = "1";
+    btn.type = btn.getAttribute("type") || "button";
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      await goNextRoundSafely();
+    });
+  }
+  return btn;
+}
+
+function setNextRoundBtnVisible(visible) {
+  const btn = ensureNextRoundBtn();
+  if (!btn) return;
+  btn.classList.toggle("hidden", !visible);
+}
+
+async function goNextRoundSafely() {
+  const btn = el("nextRoundBtn");
+  if (btn) btn.disabled = true;
+  try {
+    await goNextRound();
+  } catch (err) {
+    console.error(err);
+    openModal("Error", escapeHtml(String(err?.message ?? err)));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function escapeHtml(s) {
   return String(s ?? "")
     .replaceAll("&", "&amp;")
@@ -26,11 +108,31 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;");
 }
 
+
 function showScreen(name) {
   const screens = ["screenMenu", "screenTeams", "screenGame", "screenEditor"];
   for (const s of screens) el(s)?.classList.toggle("hidden", s !== name);
   el("menuBtn")?.classList.toggle("hidden", name === "screenMenu");
   document.body.classList.toggle("modeGame", name === "screenGame");
+}
+
+function openItemModal({ title, image_data, text }) {
+  const modal = el("itemModal");
+  const img = el("itemModalImage");
+  const ttl = el("itemModalTitle");
+  const txt = el("itemModalText");
+
+  if (!modal || !img || !ttl || !txt) return;
+
+  ttl.textContent = title || "";
+  img.src = detectDataUrl(image_data || "");
+  txt.textContent = text || "";
+
+  modal.classList.remove("hidden");
+}
+
+function closeItemModal() {
+  el("itemModal")?.classList.add("hidden");
 }
 
 function getTeamBox(team) {
@@ -103,7 +205,6 @@ async function loadTemplates({ force = false } = {}) {
   templatesLoadedAt = now;
   return templatesCache;
 }
-
 
 /* ---------- Multi-round pick UI ---------- */
 function loadGamePlanDraft() {
@@ -231,16 +332,14 @@ function renderRoundImage() {
 function renderGame() {
   if (!round) return;
 
+  const kind = round.kind || "rated";
+
+  el("itemsList")?.classList.toggle("hidden", kind === "carousel");
+
   if (el("prompt")) el("prompt").textContent = round.prompt || "";
   updateTeamLabels();
   setActiveTeam(round.current_team);
   renderScores();
-  renderRoundImage();
-
-  const list = el("itemsList");
-  if (!list) return;
-
-  list.innerHTML = "";
 
   const isFinished = round.status !== "active";
   const isTie = isFinished && !round.winner_team && !round.loser_team;
@@ -255,6 +354,27 @@ function renderGame() {
   } else {
     setRoundStatus("", "");
   }
+
+  if (kind === "carousel") {
+    setMediaMode("carousel");
+
+    const items = (round.items || []).map((it) => ({
+      ...it,
+      image_data: detectDataUrl(it.image_data || ""),
+    }));
+
+    renderCarousel(items);
+    setNextRoundBtnVisible(isFinished && hasNextRound());
+    return;
+  }
+
+  setMediaMode("single");
+  renderRoundImage();
+
+  const list = el("itemsList");
+  if (!list) return;
+
+  list.innerHTML = "";
 
   for (const item of round.items) {
     const li = document.createElement("li");
@@ -275,13 +395,9 @@ function renderGame() {
     const meta = document.createElement("div");
     meta.className = "itemMeta";
 
-    if (item.rating != null) {
-      meta.textContent = `Rating: ${item.rating}`;
-    } else if (item.secret_text != null) {
-      meta.textContent = String(item.secret_text);
-    } else {
-      meta.textContent = "";
-    }
+    if (item.rating != null) meta.textContent = `Rating: ${item.rating}`;
+    else if (item.secret_text != null) meta.textContent = String(item.secret_text);
+    else meta.textContent = "";
 
     if (item.eliminated) title.classList.add("eliminated");
 
@@ -290,11 +406,7 @@ function renderGame() {
 
     const right = document.createElement("div");
     right.className = "itemRight";
-    if (item.eliminated && item.eliminated_by_team) {
-      right.textContent = teamNames[item.eliminated_by_team] || "";
-    } else {
-      right.textContent = "";
-    }
+    right.textContent = (item.eliminated && item.eliminated_by_team) ? (teamNames[item.eliminated_by_team] || "") : "";
 
     li.appendChild(left);
     li.appendChild(right);
@@ -322,19 +434,39 @@ function renderGame() {
     }
 
     li.addEventListener("click", async () => {
-      if (!clickable) return;
-      await eliminate(item.id);
+      const finishedNow = round.status !== "active";
+
+      if (!finishedNow && !item.eliminated) {
+        await eliminate(item.id);
+        return;
+      }
+
+      if (item.image_data) {
+        const text =
+          item.secret_text != null ? String(item.secret_text) :
+          (item.rating != null ? `Rating: ${item.rating}` : "");
+        openItemModal({ title: item.title, image_data: item.image_data, text });
+      }
     });
 
     list.appendChild(li);
   }
+  setNextRoundBtnVisible(isFinished && hasNextRound());
 }
+
 
 async function startRound() {
   closeModal();
-  round = await createRoundFor(getCurrentRoundSetId());
-  showScreen("screenGame");
-  renderGame();
+  closeItemModal();
+  carouselIndex = 0;
+
+  try {
+    round = await createRoundFor(getCurrentRoundSetId());
+    showScreen("screenGame");
+    renderGame();
+  } catch (e) {
+    openModal("Error", escapeHtml(String(e.message || e)));
+  }
 }
 
 async function startMatch() {
@@ -353,32 +485,35 @@ async function goNextRound() {
 async function eliminate(itemId) {
   try {
     const actingTeam = round.current_team;
+    const prevKind = round.kind || "rated";
 
     round = await api(`/api/rounds/${round.id}/eliminate`, {
       method: "POST",
       body: JSON.stringify({ item_id: itemId }),
     });
 
-    // Scoring:
-    // +1 for any safe elimination
-    // -4 if the eliminated item is the target (losing pick)
     const picked = round.items.find((x) => String(x.id) === String(itemId));
     const isFinished = round.status !== "active";
     const pickedWasTarget = !!(picked && isFinished && picked.is_target === true);
 
-    if (pickedWasTarget) {
-      scores[actingTeam] = (scores[actingTeam] || 0) - 4;
-    } else {
-      scores[actingTeam] = (scores[actingTeam] || 0) + 1;
-    }
+    if (pickedWasTarget) scores[actingTeam] = (scores[actingTeam] || 0) - 4;
+    else scores[actingTeam] = (scores[actingTeam] || 0) + 1;
 
     renderGame();
+
+    // For non-carousel rounds, show item image immediately after pick (if available).
+    if (prevKind !== "carousel" && picked && picked.image_data) {
+      const text =
+        picked.secret_text != null ? String(picked.secret_text) :
+        (picked.rating != null ? `Rating: ${picked.rating}` : "");
+      openItemModal({ title: picked.title, image_data: picked.image_data, text });
+    }
   } catch (e) {
     openModal("Error", escapeHtml(String(e.message || e)));
   }
 }
 
-/* ---------- Templates editor (existing logic stays) ---------- */
+/* ---------- Templates editor ---------- */
 function setEditorStatus(text) {
   const n = el("editorStatus");
   if (n) n.textContent = text || "";
@@ -389,14 +524,50 @@ function detectDataUrl(data) {
   if (!s) return "";
   if (s.startsWith("data:")) return s;
 
-  // If DB stores raw base64 without prefix — try to guess mime a bit.
   let mime = "image/png";
-  if (s.startsWith("/9j/")) mime = "image/jpeg";              // JPEG base64 header
-  else if (s.startsWith("iVBORw0KGgo")) mime = "image/png";   // PNG base64 header
-  else if (s.startsWith("R0lGOD")) mime = "image/gif";        // GIF base64 header
-  else if (s.startsWith("UklGR")) mime = "image/webp";        // WEBP base64 header (rough)
+  if (s.startsWith("/9j/")) mime = "image/jpeg";
+  else if (s.startsWith("iVBORw0KGgo")) mime = "image/png";
+  else if (s.startsWith("R0lGOD")) mime = "image/gif";
+  else if (s.startsWith("UklGR")) mime = "image/webp";
 
   return `data:${mime};base64,${s}`;
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ""));
+    r.onerror = () => reject(new Error("Failed to read image file."));
+    r.readAsDataURL(file);
+  });
+}
+
+async function fileToOptimizedDataUrl(file, { maxWidth = 1280, quality = 0.82 } = {}) {
+  const src = await fileToDataUrl(file);
+
+  const img = await new Promise((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = () => reject(new Error("Failed to decode image."));
+    i.src = src;
+  });
+
+  const w = img.naturalWidth || img.width || 1;
+  const h = img.naturalHeight || img.height || 1;
+
+  const outW = Math.min(w, maxWidth);
+  const outH = Math.round(outW * (h / w));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = outW;
+  canvas.height = outH;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return src;
+
+  ctx.drawImage(img, 0, 0, outW, outH);
+
+  return canvas.toDataURL("image/jpeg", quality);
 }
 
 function applyTemplateImage(data) {
@@ -406,7 +577,7 @@ function applyTemplateImage(data) {
   const file = el("tplImage");
 
   if (hidden) hidden.value = data ? String(data) : "";
-  if (file) file.value = ""; // prevent stale selected file after switching templates
+  if (file) file.value = "";
 
   if (!wrap || !img) return;
 
@@ -423,9 +594,13 @@ function applyTemplateImage(data) {
 function setItemsHeaderHint(kind) {
   const editor = el("screenEditor");
   if (!editor) return;
+
   const hint = editor.querySelector(".itemsHeader .mutedSmall");
   if (!hint) return;
-  hint.textContent = kind === "manual" ? "Title + hidden info + target" : "Title + rating";
+
+  if (kind === "rated") hint.textContent = "Title + rating + image (optional)";
+  else if (kind === "carousel") hint.textContent = "Title + hidden info + target + image (required)";
+  else hint.textContent = "Title + hidden info + target + image (optional)";
 }
 
 function readTitlesOnlyFromForm() {
@@ -482,10 +657,11 @@ function ensureTemplateKindControl() {
   kindSel.addEventListener("change", () => {
     currentTemplateKind = kindSel.value || "rated";
     const base = readTitlesOnlyFromForm();
+
     const seedItems =
-      currentTemplateKind === "manual"
-        ? base.map((x) => ({ title: x.title, secret_text: "", is_target: false }))
-        : base.map((x) => ({ title: x.title, rating: "" }));
+      currentTemplateKind === "rated"
+        ? base.map((x) => ({ title: x.title, rating: "", image_data: "" }))
+        : base.map((x) => ({ title: x.title, secret_text: "", is_target: false, image_data: "" }));
 
     renderTemplateItemsForm(seedItems, currentTemplateKind);
   });
@@ -501,23 +677,33 @@ function getKindFromUI() {
 
 function normalizeItemsTo11(items, kind) {
   const rows = [];
+  const isManualLike = (kind === "manual" || kind === "carousel");
+
   for (const it of items || []) {
-    if (kind === "manual") {
+    if (isManualLike) {
       rows.push({
         title: it.title ?? "",
         secret_text: it.secret_text ?? "",
         is_target: !!it.is_target,
+        image_data: it.image_data ?? "",
       });
     } else {
       rows.push({
         title: it.title ?? "",
         rating: it.rating ?? "",
+        image_data: it.image_data ?? "",
       });
     }
   }
+
   while (rows.length < 11) {
-    rows.push(kind === "manual" ? { title: "", secret_text: "", is_target: false } : { title: "", rating: "" });
+    rows.push(
+      isManualLike
+        ? { title: "", secret_text: "", is_target: false, image_data: "" }
+        : { title: "", rating: "", image_data: "" }
+    );
   }
+
   return rows.slice(0, 11);
 }
 
@@ -540,7 +726,8 @@ function renderTemplateItemsForm(items, kind) {
 
     row.style.display = "grid";
     row.style.gap = "10px";
-    row.style.gridTemplateColumns = (kind === "manual") ? "1fr 1fr 44px" : "1fr 140px";
+    row.style.gridTemplateColumns =
+      (kind === "rated") ? "1fr 140px 160px" : "1fr 1fr 44px 160px";
 
     const title = document.createElement("input");
     title.className = "input";
@@ -548,10 +735,18 @@ function renderTemplateItemsForm(items, kind) {
     title.value = it.title ?? "";
     title.dataset.idx = String(idx);
     title.dataset.field = "title";
-
     row.appendChild(title);
 
-    if (kind === "manual") {
+    if (kind === "rated") {
+      const rating = document.createElement("input");
+      rating.className = "input";
+      rating.placeholder = "Rating";
+      rating.value = it.rating ?? "";
+      rating.inputMode = "decimal";
+      rating.dataset.idx = String(idx);
+      rating.dataset.field = "rating";
+      row.appendChild(rating);
+    } else {
       const secret = document.createElement("input");
       secret.className = "input";
       secret.placeholder = "Hidden info";
@@ -569,17 +764,63 @@ function renderTemplateItemsForm(items, kind) {
 
       row.appendChild(secret);
       row.appendChild(target);
-    } else {
-      const rating = document.createElement("input");
-      rating.className = "input";
-      rating.placeholder = "Rating";
-      rating.value = it.rating ?? "";
-      rating.inputMode = "decimal";
-      rating.dataset.idx = String(idx);
-      rating.dataset.field = "rating";
-
-      row.appendChild(rating);
     }
+
+    const imgCell = document.createElement("div");
+    imgCell.className = "tplItemMedia";
+
+    const imgHidden = document.createElement("input");
+    imgHidden.type = "hidden";
+    imgHidden.dataset.idx = String(idx);
+    imgHidden.dataset.field = "image_data";
+    imgHidden.value = it.image_data ?? "";
+
+    const thumbWrap = document.createElement("div");
+    thumbWrap.className = "tplItemThumbWrap";
+
+    const thumb = document.createElement("img");
+    thumb.className = "tplItemThumb";
+    if (imgHidden.value) thumb.src = detectDataUrl(imgHidden.value);
+    thumbWrap.appendChild(thumb);
+
+    const file = document.createElement("input");
+    file.type = "file";
+    file.accept = "image/*";
+    file.style.display = "none";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn secondary tplItemImgBtn";
+    btn.textContent = "Image";
+    btn.addEventListener("click", () => file.click());
+
+    file.addEventListener("change", async () => {
+      try {
+        if (!file.files || !file.files[0]) return;
+
+        const f = file.files[0];
+        const maxBytes = 2.5 * 1024 * 1024;
+        if (f.size > maxBytes) {
+          setEditorStatus("Image is too large. Please pick an image under ~2.5MB.");
+          return;
+        }
+
+        const dataUrl = await fileToOptimizedDataUrl(f);
+        imgHidden.value = String(dataUrl || "");
+        if (imgHidden.value) thumb.src = detectDataUrl(imgHidden.value);
+
+        setEditorStatus("");
+      } catch (e) {
+        setEditorStatus(String(e.message || e));
+      }
+    });
+
+    imgCell.appendChild(thumbWrap);
+    imgCell.appendChild(btn);
+    imgCell.appendChild(file);
+    imgCell.appendChild(imgHidden);
+
+    row.appendChild(imgCell);
 
     box.appendChild(row);
   });
@@ -594,6 +835,7 @@ function readTemplateItemsFromForm(kind) {
     rating: "",
     secret_text: "",
     is_target: false,
+    image_data: "",
   }));
 
   const inputs = container.querySelectorAll("input,select,textarea");
@@ -607,27 +849,32 @@ function readTemplateItemsFromForm(kind) {
     else rows[idx][field] = inp.value;
   }
 
+  const isManualLike = (kind === "manual" || kind === "carousel");
+
   const items = [];
   for (const r of rows) {
     const title = String(r.title || "").trim();
+    const image_data = String(r.image_data || "");
+
     const hasAny =
       title ||
       String(r.rating || "").trim() ||
       String(r.secret_text || "").trim() ||
-      !!r.is_target;
+      !!r.is_target ||
+      !!image_data;
 
     if (!hasAny) continue;
     if (!title) throw new Error("Each item must have a title.");
 
-    if (kind === "manual") {
+    if (isManualLike) {
       const secret = String(r.secret_text || "").trim();
-      if (!secret) throw new Error("Manual round: each item must have hidden info.");
-      items.push({ title, secret_text: secret, is_target: !!r.is_target });
+      if (!secret) throw new Error("Manual/carousel round: each item must have hidden info.");
+      items.push({ title, secret_text: secret, is_target: !!r.is_target, image_data });
     } else {
       const ratingRaw = String(r.rating || "").trim();
       const rating = Number(ratingRaw);
       if (!Number.isFinite(rating)) throw new Error("Rated round: each item must have a numeric rating.");
-      items.push({ title, rating });
+      items.push({ title, rating, image_data });
     }
   }
 
@@ -682,12 +929,11 @@ async function saveTemplate() {
   if (!prompt) throw new Error("Prompt is required.");
   if (items.length < 2) throw new Error("Add at least 2 items.");
 
-  if (kind === "manual") {
+  if (kind === "manual" || kind === "carousel") {
     const targets = items.filter((x) => x.is_target);
-    if (targets.length !== 1) throw new Error("Manual round: select exactly 1 target item.");
+    if (targets.length !== 1) throw new Error("Manual/carousel round: select exactly 1 target item.");
   }
 
-  // Keep image_data if your editor sends it (otherwise it will be ignored by backend)
   const imgEl = el("tplImageData");
   const image_data = imgEl ? (imgEl.value || null) : null;
 
@@ -731,21 +977,33 @@ function wireUI() {
     el("team1Input").value = teamNames[1];
     el("team2Input").value = teamNames[2];
     showScreen("screenTeams");
+
     try {
       await loadTemplates({ force: true });
     } catch (e) {
       openModal("Error", escapeHtml(String(e.message || e)));
       templatesCache = [];
     }
+
     gamePlanDraft = loadGamePlanDraft();
     saveGamePlanDraft();
     renderRoundPickList();
   });
 
+  on("itemModalClose", "click", closeItemModal);
+
+  const itemModal = el("itemModal");
+  if (itemModal) {
+    itemModal.addEventListener("click", (evt) => {
+      if (evt.target === itemModal) closeItemModal();
+    });
+  }
+
   on("goEditRounds", "click", async () => {
     showScreen("screenEditor");
     clearEditorForm();
     setEditorStatus("Loading rounds…");
+
     await loadTemplates()
       .then(() => {
         renderTemplatesList();
@@ -764,21 +1022,14 @@ function wireUI() {
 
       const file = input.files[0];
 
-      // Optional safety: avoid huge base64 in DB (you can adjust/remove)
-      const maxBytes = 2.5 * 1024 * 1024; // 2.5MB
+      const maxBytes = 2.5 * 1024 * 1024;
       if (file.size > maxBytes) {
         setEditorStatus("Image is too large. Please pick an image under ~2.5MB.");
         applyTemplateImage("");
         return;
       }
 
-      const dataUrl = await new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(String(r.result || ""));
-        r.onerror = () => reject(new Error("Failed to read image file."));
-        r.readAsDataURL(file);
-      });
-
+      const dataUrl = await fileToOptimizedDataUrl(file);
       applyTemplateImage(dataUrl);
       setEditorStatus("");
     } catch (e) {
@@ -808,7 +1059,7 @@ function wireUI() {
     }
 
     gamePlan = [...gamePlanDraft];
-    localStorage.setItem("roundSet", gamePlan[0] || "builtin:movies"); // backward compat
+    localStorage.setItem("roundSet", gamePlan[0] || "builtin:movies");
 
     await startMatch();
   });
@@ -847,7 +1098,142 @@ function wireUI() {
 
 (async function init() {
   wireUI();
+
+  initCarouselControls(async (itemId) => {
+    if (!round) return;
+
+    const item = (round.items || []).find((x) => String(x.id) === String(itemId));
+    const isFinished = round.status !== "active";
+
+    if (!isFinished && item && !item.eliminated) {
+      await eliminate(itemId);
+      return;
+    }
+
+    if (item && item.image_data) {
+      const text =
+        item.secret_text != null ? String(item.secret_text) :
+        (item.rating != null ? `Rating: ${item.rating}` : "");
+      openItemModal({ title: item.title, image_data: item.image_data, text });
+    }
+  });
+
   showScreen("screenMenu");
   await loadTemplates().catch(() => {});
 })();
 
+
+function setMediaMode(mode) {
+  const imgFrame = document.getElementById("roundImageFrame");
+  const carouselFrame = document.getElementById("carouselFrame");
+
+  if (mode === "carousel") {
+    imgFrame.classList.add("hidden");
+    carouselFrame.classList.remove("hidden");
+  } else {
+    carouselFrame.classList.add("hidden");
+    imgFrame.classList.remove("hidden");
+  }
+}
+
+function renderCarousel(items) {
+  const isFinished = round?.status !== "active";
+  carouselItems = (items || []).slice();
+
+  if (isFinished) {
+    const idx = carouselItems.findIndex((x) => x.is_target === true);
+    if (idx >= 0) carouselIndex = idx;
+  }
+
+  const track = document.getElementById("carouselTrack");
+  if (!track) return;
+
+  track.innerHTML = carouselItems.map((it) => {
+    const title = escapeHtml(it.title || "");
+    const img = detectDataUrl(it.image_data || "");
+
+    const classes = [
+      "carouselItem",
+      it.eliminated ? "eliminatedCard" : "",
+      (isFinished && it.is_target === true) ? "losingPick" : "",
+    ].filter(Boolean).join(" ");
+
+    const nextOverlay =
+      (isFinished && it.is_target === true && hasNextRound())
+        ? `<div class="nextRoundOverlay" data-action="next-round"><span class="btn success">Next round</span></div>`
+        : "";
+
+    return `
+      <div class="${classes}" data-item-id="${it.id}" role="button" tabindex="0" title="${title}">
+        <img src="${img}" alt="${title}">
+        <div class="carouselCaption">${title}</div>
+        ${nextOverlay}
+      </div>
+    `;
+  }).join("");
+
+  updateCarouselTransform();
+}
+
+
+function getCarouselStepPx() {
+  const track = document.getElementById("carouselTrack");
+  const first = track.querySelector(".carouselItem");
+  if (!first) return 0;
+
+  const frame = document.getElementById("carouselFrame");
+  const gap = parseFloat(getComputedStyle(frame).getPropertyValue("--gap")) || 12;
+
+  return first.getBoundingClientRect().width + gap;
+}
+
+function getVisibleCount() {
+  const frame = document.getElementById("carouselFrame");
+  const v = parseFloat(getComputedStyle(frame).getPropertyValue("--visible"));
+  return Number.isFinite(v) && v > 0 ? v : 5;
+}
+
+function updateCarouselTransform() {
+  const track = document.getElementById("carouselTrack");
+  const visible = getVisibleCount();
+  const maxIndex = Math.max(0, carouselItems.length - visible);
+
+  if (carouselIndex > maxIndex) carouselIndex = 0;
+  if (carouselIndex < 0) carouselIndex = maxIndex;
+
+  const step = getCarouselStepPx();
+  track.style.transform = `translateX(${-carouselIndex * step}px)`;
+}
+
+function initCarouselControls(onPickItem) {
+  const prev = document.getElementById("carouselPrev");
+  const next = document.getElementById("carouselNext");
+  const track = document.getElementById("carouselTrack");
+
+  prev.onclick = () => {
+    carouselIndex -= 1;
+    updateCarouselTransform();
+  };
+
+  next.onclick = () => {
+    carouselIndex += 1;
+    updateCarouselTransform();
+  };
+
+  window.addEventListener("resize", () => updateCarouselTransform());
+
+  track.addEventListener("click", async (e) => {
+    const next = e.target.closest('[data-action="next-round"]');
+    if (next) {
+      e.preventDefault();
+      e.stopPropagation();
+      await goNextRound();
+      return;
+    }
+
+    const btn = e.target.closest(".carouselItem");
+    if (!btn) return;
+    const itemId = btn.dataset.itemId;
+    if (itemId) onPickItem(itemId);
+  });
+}
