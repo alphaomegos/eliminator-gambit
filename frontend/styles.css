@@ -252,16 +252,57 @@ body.modeGame .page { padding-top: 14px; }
   flex-direction: column;
   text-align: center;
   overflow: hidden;
+  align-items: center; /* prevent full-width stretching of children */
 }
 
-.gameMenuBtn {
+/* Round image as full background of the center header card */
+#screenGame .gameHeaderCard {
+  position: relative;
+  overflow: hidden;
+}
+
+#screenGame .gameHeaderCard > #roundImageFrame {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none; /* never blocks clicks */
+}
+
+#screenGame .gameHeaderCard > #roundImageFrame img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+#screenGame .gameHeaderCard > :not(#roundImageFrame) {
+  position: relative;
+  z-index: 2;
 }
 
 .gameBrand .title { margin: 0; }
 .gameBrand .subtitle { margin-top: 4px; }
+
+/* Keep Menu button in the top-right corner and readable */
+.gameMenuBtn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 6;
+  width: auto;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.38);
+  border-color: rgba(255,255,255,0.14);
+  color: var(--text);
+}
+
+.gameMenuBtn:hover {
+  background: rgba(0,0,0,0.48);
+  border-color: rgba(255,255,255,0.20);
+}
 
 /* team cards */
 .sideTeam {
@@ -438,21 +479,41 @@ body.modeGame .page { padding-top: 14px; }
   background: rgba(57, 217, 138, 0.10);
 }
 
-/* Next round overlay + bright green button */
-.nextRoundOverlay {
+/* Buttons in header corners */
+#screenGame .gameHeaderCard #menuBtn.gameMenuBtn {
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+
+  width: auto;
+  padding: 8px 12px;
+  border-radius: 999px;
+
+  background: rgba(0,0,0,0.42);
+  border-color: rgba(255,255,255,0.16);
+  color: var(--text);
 }
 
-.nextRoundOverlay .btn {
-  pointer-events: auto;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+#screenGame .gameHeaderCard #menuBtn.gameMenuBtn:hover {
+  background: rgba(0,0,0,0.52);
+  border-color: rgba(255,255,255,0.22);
 }
 
+#screenGame .gameHeaderCard #nextRoundBtn,
+#screenGame .gameHeaderCard .gameNextBtn {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  width: auto;
+}
+
+/* If Next round is still rendered inside answers/carousel via overlay — hide it.
+   We want ONLY the top-left header button. */
+.nextRoundOverlay { display: none !important; }
+
+/* Bright green button */
 .btn.success {
   background: rgba(57, 217, 138, 0.18);
   border-color: rgba(57, 217, 138, 0.55);
@@ -463,6 +524,7 @@ body.modeGame .page { padding-top: 14px; }
   background: rgba(57, 217, 138, 0.26);
   border-color: rgba(57, 217, 138, 0.75);
 }
+
 
 /* Modal */
 .modal {
@@ -633,15 +695,14 @@ body.modeGame .page { padding-top: 14px; }
   height: 100%;
 }
 
-
 /* Single image should fill the media area */
-#roundImageFrame {
+#roundMedia #roundImageFrame {
   height: 100%;
   border-radius: 18px;
   overflow: hidden;
 }
 
-#roundImageFrame img {
+#roundMedia #roundImageFrame img {
   width: 100%;
   height: 100%;
   display: block;
@@ -700,7 +761,6 @@ body.modeGame .page { padding-top: 14px; }
   text-shadow: 0 1px 2px rgba(0,0,0,0.9);
 }
 
-
 .carouselItem img {
   width: 100%;
   height: 100%;
@@ -738,7 +798,7 @@ body.modeGame .page { padding-top: 14px; }
   position: absolute;
   top: 12px;
   left: 12px;
-  z-index: 3;
+  z-index: 6;
 }
 
 #carouselFrame .carouselBtn {
@@ -762,3 +822,23 @@ body.modeGame .page { padding-top: 14px; }
   border-color: rgba(57, 217, 138, 0.25);
   box-shadow: none;
 }
+
+#screenGame .gameHeaderCard .gameBrand,
+#screenGame .gameHeaderCard #prompt,
+#screenGame .gameHeaderCard #roundStatus {
+  background: rgba(0, 0, 0, 0.62);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 10px 14px;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.35);
+}
+
+#screenGame .gameHeaderCard .gameBrand,
+#screenGame .gameHeaderCard #prompt,
+#screenGame .gameHeaderCard #roundStatus {
+  width: fit-content;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+

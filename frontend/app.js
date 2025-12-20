@@ -333,7 +333,7 @@ function renderGame() {
   if (!round) return;
 
   const kind = round.kind || "rated";
-
+  el("roundMedia")?.classList.toggle("hidden", kind !== "carousel");
   el("itemsList")?.classList.toggle("hidden", kind === "carousel");
 
   if (el("prompt")) el("prompt").textContent = round.prompt || "";
@@ -1124,17 +1124,13 @@ function wireUI() {
 
 
 function setMediaMode(mode) {
-  const imgFrame = document.getElementById("roundImageFrame");
   const carouselFrame = document.getElementById("carouselFrame");
+  if (!carouselFrame) return;
 
-  if (mode === "carousel") {
-    imgFrame.classList.add("hidden");
-    carouselFrame.classList.remove("hidden");
-  } else {
-    carouselFrame.classList.add("hidden");
-    imgFrame.classList.remove("hidden");
-  }
+  if (mode === "carousel") carouselFrame.classList.remove("hidden");
+  else carouselFrame.classList.add("hidden");
 }
+
 
 function renderCarousel(items) {
   const isFinished = round?.status !== "active";
