@@ -4,7 +4,6 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>The Eliminator’s Gambit</title>
-
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -17,8 +16,8 @@
         </div>
         <div class="controls"></div>
       </header>
-
       <main class="main">
+
         <!-- MENU -->
         <section id="screenMenu" class="screen">
           <div class="card">
@@ -37,17 +36,14 @@
                 <label class="label" for="team1Input">Enter first team name</label>
                 <input id="team1Input" class="input" placeholder="Team 1" />
               </div>
-
               <div class="formRow">
                 <label class="label" for="team2Input">Enter second team name</label>
                 <input id="team2Input" class="input" placeholder="Team 2" />
               </div>
-
               <div class="formRow">
                 <label class="label">Pick from 1 to 10 rounds. Selection order defines play order.</label>
                 <div id="roundPickList" class="roundPickList"></div>
               </div>
-
               <div class="formActions">
                 <button id="startBtn" class="btn">Start</button>
                 <button id="backToMenuFromTeams" class="btn secondary">Back</button>
@@ -64,11 +60,14 @@
               <div class="teamScore" id="score1">0</div>
             </div>
             <div class="card gameHeaderCard">
-              <button id="nextRoundBtn" class="btn success hidden gameNextBtn" type="button">Next round</button>
-              <button id="menuBtn" class="btn secondary hidden gameMenuBtn">Menu</button>
               <div class="roundImageFrame hidden" id="roundImageFrame">
                 <img id="roundImage" alt="Round image" />
               </div>
+              <button id="nextRoundBtn" class="btn success hidden gameNextBtn" type="button">Next round</button>
+              <button id="menuBtn" class="btn secondary hidden gameMenuBtn">Menu</button>
+              <button id="showAllBtn" class="btn secondary hidden showAllBtn" type="button">
+                Show everything
+              </button>
               <div class="gameBrand">
                 <div class="title">The Eliminator’s Gambit</div>
                 <div class="subtitle">Eliminate carefully. One wrong tap ends the round.</div>
@@ -91,8 +90,11 @@
             </div>
             <ol class="list answersGrid" id="itemsList"></ol>
           </div>
+          <div id="showAllOverlay" class="showAllOverlay hidden" aria-hidden="true">
+            <div class="showAllGrid" id="showAllGrid"></div>
+            <button id="showAllClose" class="btn secondary showAllClose" type="button">Close</button>
+          </div>
         </section>
-
 
         <!-- EDITOR -->
         <section id="screenEditor" class="screen hidden">
@@ -116,50 +118,44 @@
                   <div class="editorTitle">Rounds</div>
                   <button id="addTemplateBtn" class="btn">+ Add</button>
                 </div>
-
                 <div id="templatesList" class="templatesList"></div>
-
                 <div class="editorFooter">
                   <button id="backToMenuFromEditor" class="btn secondary">Back</button>
                 </div>
               </div>
-
               <div class="editorMain">
                 <div class="card">
                   <div class="formRow">
                     <label class="label" for="tplName">Round name</label>
                     <input id="tplName" class="input" placeholder="e.g. Movies – Worst rated" />
                   </div>
-
                   <div class="formRow">
                     <label class="label" for="tplPrompt">Prompt</label>
                     <input id="tplPrompt" class="input" placeholder="e.g. Find the lowest-rated movie." />
                   </div>
-
                   <div class="formRow">
                     <label class="label" for="tplImage">Round image (optional)</label>
                     <input id="tplImage" class="input" type="file" accept="image/*" />
-
                     <!-- app.js reads this if present -->
                     <input id="tplImageData" type="hidden" />
-
                     <div id="tplImagePreviewWrap" class="roundImageFrame roundImageFrame--preview hidden" style="margin-top:10px;">
                       <img id="tplImagePreview" class="roundImage" alt="Preview" />
                     </div>
+                    <div class="editorImageActions">
+                       <button id="tplImageRemoveBtn" class="btn secondary small hidden" type="button">
+                         Remove image
+                       </button>
+                    </div>
                   </div>
-
                   <div class="itemsHeader">
                     <div>Items</div>
                     <div class="mutedSmall">Title + rating</div>
                   </div>
-
                   <div id="tplItems" class="tplItems"></div>
-
                   <div class="formActions">
                     <button id="saveTemplateBtn" class="btn">Save</button>
                     <button id="deleteTemplateBtn" class="btn secondary">Delete</button>
                   </div>
-
                   <div id="editorStatus" class="status mutedSmall"></div>
                 </div>
               </div>

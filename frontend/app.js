@@ -1,7 +1,8 @@
 let round = null;
 let carouselIndex = 0;
-
 let carouselItems = [];
+let showAllOpen = false;
+
 
 function initCarouselControls(onPickItem) {
   const prev = document.getElementById("carouselPrev");
@@ -333,6 +334,8 @@ function renderGame() {
   if (!round) return;
 
   const kind = round.kind || "rated";
+  el("showAllBtn")?.classList.toggle("hidden", kind !== "carousel");
+  if (kind !== "carousel" && showAllOpen) closeShowAllOverlay();
   el("roundMedia")?.classList.toggle("hidden", kind !== "carousel");
   el("itemsList")?.classList.toggle("hidden", kind === "carousel");
 
@@ -575,13 +578,19 @@ function applyTemplateImage(data) {
   const wrap = el("tplImagePreviewWrap");
   const img = el("tplImagePreview");
   const file = el("tplImage");
+  const removeBtn = el("tplImageRemoveBtn");
 
-  if (hidden) hidden.value = data ? String(data) : "";
+  const has = !!data;
+
+  if (hidden) hidden.value = has ? String(data) : "";
   if (file) file.value = "";
+
+  // show/hide remove button
+  if (removeBtn) removeBtn.classList.toggle("hidden", !has);
 
   if (!wrap || !img) return;
 
-  if (!data) {
+  if (!has) {
     wrap.classList.add("hidden");
     img.removeAttribute("src");
     return;
@@ -1019,16 +1028,13 @@ function wireUI() {
         applyTemplateImage("");
         return;
       }
-
       const file = input.files[0];
-
       const maxBytes = 2.5 * 1024 * 1024;
       if (file.size > maxBytes) {
         setEditorStatus("Image is too large. Please pick an image under ~2.5MB.");
         applyTemplateImage("");
         return;
       }
-
       const dataUrl = await fileToOptimizedDataUrl(file);
       applyTemplateImage(dataUrl);
       setEditorStatus("");
@@ -1036,6 +1042,13 @@ function wireUI() {
       setEditorStatus(String(e.message || e));
       applyTemplateImage("");
     }
+  });
+
+  on("tplImageRemoveBtn", "click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    applyTemplateImage("");
+    setEditorStatus("Image removed. Click Save to apply.");
   });
 
   on("backToMenuFromTeams", "click", () => showScreen("screenMenu"));
@@ -1096,8 +1109,68 @@ function wireUI() {
   }
 }
 
+function renderShowAllGrid() {
+  const grid = el("showAllGrid");
+  if (!grid) return;
+
+  const items = (carouselItems && carouselItems.length)
+    ? carouselItems
+    : (round?.items || []);
+
+  grid.innerHTML = items.map((it) => {
+    const title = escapeHtml(it.title || "");
+    const img = detectDataUrl(it.image_data || "");
+    const classes = ["showAllItem", it.eliminated ? "eliminatedCard" : ""].filter(Boolean).join(" ");
+
+    return `
+      <div class="${classes}">
+        <img src="${img}" alt="${title}">
+        <div class="showAllCaption">${title}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function openShowAllOverlay() {
+  if (!round) return;
+  const kind = round.kind || "rated";
+  if (kind !== "carousel") return;
+
+  renderShowAllGrid();
+
+  const overlay = el("showAllOverlay");
+  if (!overlay) return;
+
+  showAllOpen = true;
+  overlay.classList.remove("hidden");
+  overlay.setAttribute("aria-hidden", "false");
+  document.body.classList.add("showAllOpen");
+}
+
+function closeShowAllOverlay() {
+  const overlay = el("showAllOverlay");
+  if (!overlay) return;
+
+  showAllOpen = false;
+  overlay.classList.add("hidden");
+  overlay.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("showAllOpen");
+}
+
+
 (async function init() {
   wireUI();
+  el("showAllBtn")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openShowAllOverlay();
+  });
+
+  el("showAllClose")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeShowAllOverlay();
+  });
 
   initCarouselControls(async (itemId) => {
     if (!round) return;
