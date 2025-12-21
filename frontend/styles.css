@@ -110,6 +110,31 @@ body.modeGame .page { padding-top: 14px; }
   cursor: pointer;
 }
 
+/* Item image button (non-carousel rounds) */
+.item.hasImage .showImageBtn {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+
+  z-index: 5;
+
+  padding: 8px 12px;
+  border-radius: 999px;
+
+  background: rgba(0, 0, 0, 0.38);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--text);
+
+  opacity: 0.9;
+}
+
+.item.hasImage:hover .showImageBtn {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.48);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
 .itemTitle { font-size: 18px; font-weight: 600; line-height: 1.15; }
 .itemMeta { color: var(--muted); font-size: 12px; margin-top: 3px; }
 .itemMeta:empty { display: none; }

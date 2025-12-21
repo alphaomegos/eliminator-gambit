@@ -3,7 +3,6 @@ let carouselIndex = 0;
 let carouselItems = [];
 let showAllOpen = false;
 
-
 function initCarouselControls(onPickItem) {
   const prev = document.getElementById("carouselPrev");
   const next = document.getElementById("carouselNext");
@@ -57,6 +56,37 @@ let currentTemplateId = null;
 let currentTemplateKind = "rated";
 
 let templatesLoadedAt = 0;
+
+// Cache item images locally so UI (Show image) doesn't disappear
+// when backend returns "light" items (without image_data) after actions.
+let itemImageCacheRoundId = null;
+let itemImageCache = new Map(); // itemId -> image_data
+
+function syncRoundItemImages(r, { reset = false } = {}) {
+  if (!r || !Array.isArray(r.items)) return r;
+
+  const rid = String(r.id ?? "");
+  if (reset || itemImageCacheRoundId !== rid) {
+    itemImageCacheRoundId = rid;
+    itemImageCache = new Map();
+  }
+
+  // Remember any images we have
+  for (const it of r.items) {
+    if (it && it.id != null && it.image_data) {
+      itemImageCache.set(String(it.id), it.image_data);
+    }
+  }
+
+  // Re-apply cached images if backend omitted them
+  r.items = r.items.map((it) => {
+    if (!it || it.id == null || it.image_data) return it;
+    const cached = itemImageCache.get(String(it.id));
+    return cached ? { ...it, image_data: cached } : it;
+  });
+
+  return r;
+}
 
 /* Multi-round match state */
 let gamePlanDraft = []; // what host selects on Teams screen (ordered)
@@ -301,10 +331,46 @@ function getCurrentRoundSetId() {
 async function createRoundFor(roundSetId) {
   if (roundSetId && roundSetId.startsWith("template:")) {
     const templateId = roundSetId.slice("template:".length);
-    return api("/api/rounds/from-template", {
+
+    // Create the round instance.
+    const created = await api("/api/rounds/from-template", {
       method: "POST",
       body: JSON.stringify({ template_id: templateId }),
     });
+
+    // Some backends return "light" items for active rounds (without item.image_data).
+    // Hydrate images from the template so "Show image" is available immediately.
+    try {
+      const items = Array.isArray(created?.items) ? created.items : [];
+      const alreadyHasImages = items.some((it) => !!(it && it.image_data));
+
+      if (!alreadyHasImages) {
+        const tpl = await api(`/api/templates/${templateId}`);
+        const tplItems = Array.isArray(tpl?.items) ? tpl.items : [];
+
+        if (tplItems.length) {
+          const byTitle = new Map();
+          for (const t of tplItems) {
+            const key = String(t?.title ?? "").trim();
+            if (key && t?.image_data && !byTitle.has(key)) byTitle.set(key, t.image_data);
+          }
+
+          created.items = items.map((it, i) => {
+            if (it && it.image_data) return it;
+
+            const fromIndex = tplItems[i]?.image_data;
+            const fromTitle = byTitle.get(String(it?.title ?? "").trim());
+            const img = fromIndex || fromTitle || "";
+
+            return { ...it, image_data: img };
+          });
+        }
+      }
+    } catch (_) {
+      // If hydration fails we still can play the round; "Show image" just won't appear.
+    }
+
+    return created;
   }
 
   // builtin
@@ -313,6 +379,7 @@ async function createRoundFor(roundSetId) {
     body: JSON.stringify({ category: "movies" }),
   });
 }
+
 
 function renderRoundImage() {
   const frame = el("roundImageFrame");
@@ -413,6 +480,27 @@ function renderGame() {
 
     li.appendChild(left);
     li.appendChild(right);
+    const modalText =
+      item.secret_text != null ? String(item.secret_text) :
+      (item.rating != null ? `Rating: ${item.rating}` : "");
+
+    if (item.image_data) {
+      li.classList.add("hasImage");
+
+      const showImgBtn = document.createElement("button");
+      showImgBtn.type = "button";
+      showImgBtn.className = "btn secondary small showImageBtn";
+      showImgBtn.textContent = "Show image";
+
+      showImgBtn.addEventListener("click", (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        openItemModal({ title: item.title, image_data: item.image_data, text: modalText });
+     });
+
+      li.appendChild(showImgBtn);
+    }
+
 
     if (isLosingPick && hasNextRound()) {
       const overlay = document.createElement("div");
@@ -465,6 +553,7 @@ async function startRound() {
 
   try {
     round = await createRoundFor(getCurrentRoundSetId());
+    round = syncRoundItemImages(round, { reset: true });
     showScreen("screenGame");
     renderGame();
   } catch (e) {
@@ -494,7 +583,7 @@ async function eliminate(itemId) {
       method: "POST",
       body: JSON.stringify({ item_id: itemId }),
     });
-
+    round = syncRoundItemImages(round);
     const picked = round.items.find((x) => String(x.id) === String(itemId));
     const isFinished = round.status !== "active";
     const pickedWasTarget = !!(picked && isFinished && picked.is_target === true);
