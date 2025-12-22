@@ -21,22 +21,23 @@ services:
       DATABASE_URL: postgresql://eliminator:eliminator@db:5432/eliminator
     volumes:
       - ./backend/app:/app/app:ro,Z
-
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "8000:8000"
+    # IMPORTANT: do NOT publish api port to the host in the ALB/EC2 setup.
+    # Nginx will reach it over the internal Docker network at http://api:8000
+    expose:
+      - "8000"
 
   web:
     image: nginx:alpine
     depends_on:
       - api
     ports:
-      - "8080:80"
+      - "80:80"
     volumes:
-    - ./frontend:/usr/share/nginx/html:ro,Z
-    - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro,Z
+      - ./frontend:/usr/share/nginx/html:ro,Z
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro,Z
 
 volumes:
   pgdata:
