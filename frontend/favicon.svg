@@ -1,6 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <rect width="256" height="256" rx="56" fill="#12141b"></rect>
-  <path d="M74 170h108" stroke="#39d98a" stroke-width="14" stroke-linecap="round"></path>
-  <path d="M92 92h72" stroke="#e9e9ee" stroke-width="14" stroke-linecap="round"></path>
-  <path d="M92 126h92" stroke="#a7a9b4" stroke-width="14" stroke-linecap="round"></path>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" fill="none">
+  <!-- Background (transparent by default) -->
+
+  <!-- Checklist card -->
+  <rect x="20" y="22" width="64" height="76" rx="14" stroke="currentColor" stroke-width="6" opacity="0.95"></rect>
+  <path d="M34 44h24" stroke="currentColor" stroke-width="6" stroke-linecap="round" opacity="0.7"></path>
+  <path d="M34 60h24" stroke="currentColor" stroke-width="6" stroke-linecap="round" opacity="0.7"></path>
+  <path d="M34 76h24" stroke="currentColor" stroke-width="6" stroke-linecap="round" opacity="0.7"></path>
+
+  <!-- Checks -->
+  <path d="M26 43l4 4 8-10" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.95"></path>
+  </svg>
