@@ -2,8 +2,21 @@
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Game sets (login namespace)
+CREATE TABLE IF NOT EXISTS game_sets (
+  name TEXT PRIMARY KEY,
+  CONSTRAINT chk_game_sets_name_len CHECK (char_length(name) = 6)
+);
+
+-- Default game set for existing database
+INSERT INTO game_sets(name) VALUES ('EDUARD')
+ON CONFLICT DO NOTHING;
+
+
 CREATE TABLE IF NOT EXISTS rounds (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  game_set TEXT NOT NULL REFERENCES game_sets(name) ON DELETE RESTRICT,
+
   category TEXT NOT NULL,
   prompt TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -11,8 +24,17 @@ CREATE TABLE IF NOT EXISTS rounds (
   status TEXT NOT NULL DEFAULT 'active', -- active | finished
   target_item_id UUID NOT NULL,
   winner_team INT,
-  loser_team INT
+  loser_team INT,
+
+  -- Round kind: rated | manual | carousel
+  kind TEXT NOT NULL DEFAULT 'rated',
+
+  -- optional round image
+  image_data TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_rounds_game_set ON rounds(game_set);
+
 
 CREATE TABLE IF NOT EXISTS items (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -26,15 +48,22 @@ CREATE TABLE IF NOT EXISTS items (
 
 CREATE INDEX IF NOT EXISTS idx_items_round_id ON items(round_id);
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 CREATE TABLE IF NOT EXISTS templates (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  game_set TEXT NOT NULL REFERENCES game_sets(name) ON DELETE RESTRICT,
+
   name TEXT NOT NULL,
   prompt TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  -- templates: kind (rated/manual/carousel) and optional image
+  kind TEXT NOT NULL DEFAULT 'rated',
+  image_data TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_templates_game_set ON templates(game_set);
+
 
 CREATE TABLE IF NOT EXISTS template_items (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -131,3 +160,6 @@ ALTER TABLE template_items
 ALTER TABLE items
   ADD COLUMN IF NOT EXISTS image_data TEXT;
 
+-- Backfill existing rows into default game set (for older DBs)
+UPDATE templates SET game_set = 'EDUARD' WHERE game_set IS NULL;
+UPDATE rounds    SET game_set = 'EDUARD' WHERE game_set IS NULL;

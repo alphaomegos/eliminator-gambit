@@ -18,12 +18,31 @@
       </header>
       <main class="main">
 
+        <!-- LOGIN -->
+        <section id="screenLogin" class="screen hidden">
+          <div class="card">
+            <div class="form">
+              <div class="formRow">
+                <div class="label">Please, enter the name of your game set</div>
+                <input id="loginInput" class="input" maxlength="6" placeholder="6 characters" />
+                <div id="loginWarn" class="status mutedSmall hidden">
+                  Game set not found. Would you like to create new with this name?
+                </div>
+              </div>
+              <div class="formActions">
+                <button id="loginSubmit" class="btn">Submit</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- MENU -->
         <section id="screenMenu" class="screen">
           <div class="card">
             <div class="menuGrid">
               <button id="goNewGame" class="btn big">New game</button>
               <button id="goEditRounds" class="btn big secondary">Edit rounds</button>
+              <button id="logoutBtn" class="btn big secondary">Logout</button>
             </div>
           </div>
         </section>

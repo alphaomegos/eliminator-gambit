@@ -2,6 +2,20 @@ let round = null;
 let carouselIndex = 0;
 let carouselItems = [];
 let showAllOpen = false;
+let gameSet = (localStorage.getItem("gameSet") || "").trim();
+
+function setGameSet(name) {
+  gameSet = String(name || "").trim().toUpperCase();
+  if (gameSet) localStorage.setItem("gameSet", gameSet);
+  else localStorage.removeItem("gameSet");
+
+  // reset caches tied to dataset
+  templatesCache = [];
+  templatesLoadedAt = 0;
+  currentTemplateId = null;
+  itemImageCacheRoundId = null;
+  itemImageCache = new Map();
+}
 
 function initCarouselControls(onPickItem) {
   const prev = document.getElementById("carouselPrev");
@@ -141,9 +155,11 @@ function escapeHtml(s) {
 
 
 function showScreen(name) {
-  const screens = ["screenMenu", "screenTeams", "screenGame", "screenEditor"];
+  const screens = ["screenLogin", "screenMenu", "screenTeams", "screenGame", "screenEditor"];
   for (const s of screens) el(s)?.classList.toggle("hidden", s !== name);
-  el("menuBtn")?.classList.toggle("hidden", name === "screenMenu");
+
+  // menu button only inside game/editor/teams
+  el("menuBtn")?.classList.toggle("hidden", name === "screenMenu" || name === "screenLogin");
   document.body.classList.toggle("modeGame", name === "screenGame");
 }
 
@@ -209,9 +225,21 @@ function closeModal() {
 }
 
 async function api(path, options = {}) {
+  const isGameSetEndpoint = String(path || "").startsWith("/api/game-sets");
+
+  const headers = {
+    ...(options.headers || {}),
+    ...(options.body ? { "Content-Type": "application/json" } : {}),
+  };
+
+  if (!isGameSetEndpoint) {
+    if (!gameSet) throw new Error("Not logged in. Please enter the name of your game set.");
+    headers["X-Game-Set"] = gameSet;
+  }
+
   const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers,
   });
 
   if (!res.ok) {
@@ -223,6 +251,9 @@ async function api(path, options = {}) {
     throw new Error(msg);
   }
 
+  // Some endpoints might be empty responses
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) return null;
   return res.json();
 }
 
@@ -1070,7 +1101,110 @@ function on(id, event, handler) {
   node.addEventListener(event, handler);
 }
 
+async function renderLoginState() {
+  const input = el("loginInput");
+  const warn = el("loginWarn");
+  const submit = el("loginSubmit");
+  if (!input || !warn || !submit) return;
+
+  // force uppercase
+  const raw = String(input.value || "");
+  const up = raw.toUpperCase();
+  if (raw !== up) input.value = up;
+
+  const val = up.trim();
+  submit.disabled = val.length !== 6;
+
+  if (val.length !== 6) {
+    warn.classList.add("hidden");
+    warn.dataset.exists = "";
+    return;
+  }
+
+  try {
+    const r = await api(`/api/game-sets/${encodeURIComponent(val)}`);
+    const exists = !!(r && r.exists);
+    warn.dataset.exists = exists ? "1" : "0";
+    warn.classList.toggle("hidden", exists);
+  } catch (e) {
+    // If backend rejects (length etc) just hide warning
+    warn.classList.add("hidden");
+    warn.dataset.exists = "";
+  }
+}
+
+async function doLoginSubmit() {
+  const input = el("loginInput");
+  const warn = el("loginWarn");
+  if (!input || !warn) return;
+
+  const name = String(input.value || "").trim().toUpperCase();
+  if (name.length !== 6) {
+    openModal("Error", "Login must be exactly 6 characters.");
+    return;
+  }
+
+  const existsFlag = warn.dataset.exists; // "1" / "0" / ""
+  const exists = existsFlag === "1";
+
+  if (!exists) {
+    // create new
+    await api(`/api/game-sets/${encodeURIComponent(name)}`, { method: "POST" });
+  }
+
+  setGameSet(name);
+  showScreen("screenMenu");
+}
+
+
 function wireUI() {
+  // Login screen
+  on("loginInput", "input", async () => {
+    await renderLoginState();
+  });
+
+  // Enter = Submit
+  on("loginInput", "keydown", async (e) => {
+    if (e.key !== "Enter") return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const btn = el("loginSubmit");
+    if (!btn || btn.disabled) return;
+
+    try {
+      await doLoginSubmit();
+    } catch (err) {
+      openModal("Error", escapeHtml(String(err?.message ?? err)));
+    }
+  });
+
+  on("loginSubmit", "click", async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await doLoginSubmit();
+    } catch (err) {
+      openModal("Error", escapeHtml(String(err?.message ?? err)));
+    }
+  });
+
+  // Logout
+  on("logoutBtn", "click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setGameSet("");
+    showScreen("screenLogin");
+    const input = el("loginInput");
+    if (input) {
+      input.value = "";
+      input.focus();
+    }
+    const warn = el("loginWarn");
+    if (warn) warn.classList.add("hidden");
+  });
+
   on("goNewGame", "click", async () => {
     el("team1Input").value = teamNames[1];
     el("team2Input").value = teamNames[2];
@@ -1280,8 +1414,14 @@ function closeShowAllOverlay() {
     }
   });
 
-  showScreen("screenMenu");
-  await loadTemplates().catch(() => {});
+  if (!gameSet) {
+    showScreen("screenLogin");
+    el("loginInput")?.focus();
+    await renderLoginState();
+  } else {
+    showScreen("screenMenu");
+    await loadTemplates().catch(() => {});
+  }
 })();
 
 

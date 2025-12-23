@@ -5,7 +5,7 @@ import uuid
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, conlist
 
@@ -105,15 +105,50 @@ def _startup() -> None:
 def health() -> Dict[str, str]:
     return {"status": "ok"}
 
-
 @app.get("/api/categories")
 def categories() -> Dict[str, List[str]]:
     return {"categories": list_categories()}
 
+@app.get("/api/game-sets/{name}")
+def game_set_exists(name: str) -> dict:
+    if len(name) != 6:
+        raise HTTPException(status_code=400, detail="Game set name must be exactly 6 characters")
+
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM game_sets WHERE name=%s", (name,))
+            exists = cur.fetchone() is not None
+
+    return {"exists": exists}
+
+
+@app.post("/api/game-sets/{name}")
+def create_game_set(name: str) -> dict:
+    if len(name) != 6:
+        raise HTTPException(status_code=400, detail="Game set name must be exactly 6 characters")
+
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO game_sets(name) VALUES (%s) ON CONFLICT DO NOTHING",
+                (name,),
+            )
+        conn.commit()
+
+    return {"created": True}
 
 # =========================
 # Helpers
 # =========================
+def get_game_set(x_game_set: str | None = Header(default=None)) -> str:
+    if not x_game_set:
+        raise HTTPException(status_code=400, detail="X-Game-Set header is required")
+
+    if len(x_game_set) != 6:
+        raise HTTPException(status_code=400, detail="Game set name must be exactly 6 characters")
+
+    return x_game_set
+
 def _validate_template(kind: str, items: List[TemplateItemIn]) -> None:
     if kind not in ("rated", "manual", "carousel"):
         raise HTTPException(status_code=400, detail="Unknown template kind")
@@ -158,16 +193,16 @@ def _validate_template(kind: str, items: List[TemplateItemIn]) -> None:
                 )
 
 
-def _round_to_response(round_id: uuid.UUID) -> RoundOut:
+def _round_to_response(round_id: uuid.UUID, game_set: str) -> RoundOut:
     with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT id, category, prompt, kind, current_team, status, target_item_id, winner_team, loser_team, image_data
                 FROM rounds
-                WHERE id = %s
+                WHERE id = %s AND game_set = %s
                 """,
-                (round_id,),
+                (round_id, game_set),
             )
             row = cur.fetchone()
             if not row:
@@ -237,7 +272,7 @@ def _round_to_response(round_id: uuid.UUID) -> RoundOut:
 # Core round endpoints
 # =========================
 @app.post("/api/rounds", response_model=RoundOut)
-def create_round(req: CreateRoundRequest) -> Any:
+def create_round(req: CreateRoundRequest, game_set: str = Depends(get_game_set),) -> Any:
     category = req.category.strip().lower()
     if category not in DATASETS:
         raise HTTPException(status_code=400, detail="Unknown category")
@@ -254,14 +289,13 @@ def create_round(req: CreateRoundRequest) -> Any:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO rounds (category, prompt, kind, current_team, status, target_item_id)
-                VALUES (%s, %s, 'rated', 1, 'active', '00000000-0000-0000-0000-000000000000')
+                INSERT INTO rounds (game_set, category, prompt, kind, current_team, status, target_item_id)
+                VALUES (%s, %s, %s, 'rated', 1, 'active', '00000000-0000-0000-0000-000000000000')
                 RETURNING id
                 """,
-                (category, prompt),
+                (game_set, category, prompt),
             )
             (round_id,) = cur.fetchone()
-
             item_ids: Dict[str, uuid.UUID] = {}
             for it in picked:
                 cur.execute(
@@ -283,25 +317,25 @@ def create_round(req: CreateRoundRequest) -> Any:
 
         conn.commit()
 
-    return _round_to_response(round_id)
+    return _round_to_response(round_id, game_set)
 
 
 @app.get("/api/rounds/{round_id}", response_model=RoundOut)
-def get_round(round_id: uuid.UUID) -> Any:
-    return _round_to_response(round_id)
+def get_round(round_id: uuid.UUID, game_set: str = Depends(get_game_set)) -> Any:
+    return _round_to_response(round_id, game_set)
 
 
 @app.post("/api/rounds/{round_id}/eliminate", response_model=RoundOut)
-def eliminate(round_id: uuid.UUID, req: EliminateRequest) -> Any:
+def eliminate(round_id: uuid.UUID, req: EliminateRequest, game_set: str = Depends(get_game_set)) -> Any:
     with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT current_team, status, target_item_id
                 FROM rounds
-                WHERE id = %s
+                WHERE id = %s AND game_set = %s
                 """,
-                (round_id,),
+                (round_id, game_set),
             )
             row = cur.fetchone()
             if not row:
@@ -344,12 +378,12 @@ def eliminate(round_id: uuid.UUID, req: EliminateRequest) -> Any:
                     """
                     UPDATE rounds
                     SET status='finished', winner_team=%s, loser_team=%s
-                    WHERE id=%s
+                    WHERE id=%s AND game_set=%s
                     """,
-                    (winner, loser, round_id),
+                    (winner, loser, round_id, game_set),
                 )
                 conn.commit()
-                return _round_to_response(round_id)
+                return _round_to_response(round_id, game_set)
 
             # Check remaining items
             cur.execute(
@@ -375,12 +409,12 @@ def eliminate(round_id: uuid.UUID, req: EliminateRequest) -> Any:
                         """
                         UPDATE rounds
                         SET status='finished', winner_team=NULL, loser_team=NULL
-                        WHERE id=%s
+                        WHERE id=%s AND game_set=%s
                         """,
-                        (round_id,),
+                        (round_id, game_set),
                     )
                     conn.commit()
-                    return _round_to_response(round_id)
+                    return _round_to_response(round_id, game_set)
 
                 winner = int(current_team)
                 loser = 2 if winner == 1 else 1
@@ -388,29 +422,29 @@ def eliminate(round_id: uuid.UUID, req: EliminateRequest) -> Any:
                     """
                     UPDATE rounds
                     SET status='finished', winner_team=%s, loser_team=%s
-                    WHERE id=%s
+                    WHERE id=%s AND game_set=%s
                     """,
-                    (winner, loser, round_id),
+                    (winner, loser, round_id, game_set),
                 )
                 conn.commit()
-                return _round_to_response(round_id)
+                return _round_to_response(round_id, game_set)
 
             next_team = 2 if int(current_team) == 1 else 1
             cur.execute(
-                "UPDATE rounds SET current_team=%s WHERE id=%s",
-                (next_team, round_id),
+                "UPDATE rounds SET current_team=%s WHERE id=%s AND game_set=%s",
+                (next_team, round_id, game_set),
             )
 
         conn.commit()
 
-    return _round_to_response(round_id)
+    return _round_to_response(round_id, game_set)
 
 
 # =========================
 # Templates endpoints
 # =========================
 @app.get("/api/templates", response_model=Dict[str, List[TemplateSummary]])
-def list_templates() -> Dict[str, List[TemplateSummary]]:
+def list_templates(game_set: str = Depends(get_game_set)) -> Dict[str, List[TemplateSummary]]:
     with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -418,9 +452,11 @@ def list_templates() -> Dict[str, List[TemplateSummary]]:
                 SELECT t.id, t.name, t.prompt, t.kind, COUNT(i.id) AS item_count
                 FROM templates t
                 LEFT JOIN template_items i ON i.template_id = t.id
+                WHERE t.game_set = %s
                 GROUP BY t.id, t.name, t.prompt, t.kind
                 ORDER BY t.updated_at DESC, t.created_at DESC
-                """
+                """,
+                (game_set,),
             )
             rows = cur.fetchall()
 
@@ -439,12 +475,12 @@ def list_templates() -> Dict[str, List[TemplateSummary]]:
 
 
 @app.get("/api/templates/{template_id}", response_model=TemplateOut)
-def get_template(template_id: uuid.UUID) -> Any:
+def get_template(template_id: uuid.UUID, game_set: str = Depends(get_game_set),) -> Any:
     with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, name, prompt, kind, image_data FROM templates WHERE id=%s",
-                (template_id,),
+                "SELECT id, name, prompt, kind, image_data FROM templates WHERE id=%s AND game_set=%s",
+                (template_id, game_set),
             )
             tpl = cur.fetchone()
             if not tpl:
@@ -481,18 +517,18 @@ def get_template(template_id: uuid.UUID) -> Any:
 
 
 @app.post("/api/templates", response_model=TemplateOut)
-def create_template(body: TemplateCreate) -> Any:
+def create_template(body: TemplateCreate, game_set: str = Depends(get_game_set),) -> Any:
     _validate_template(body.kind, body.items)
 
     with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO templates (name, prompt, kind, image_data)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO templates (game_set, name, prompt, kind, image_data)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (body.name.strip(), body.prompt.strip(), body.kind, body.image_data),
+                (game_set, body.name.strip(), body.prompt.strip(), body.kind, body.image_data),
             )
             (tpl_id,) = cur.fetchone()
 
@@ -514,16 +550,16 @@ def create_template(body: TemplateCreate) -> Any:
 
         conn.commit()
 
-    return get_template(tpl_id)
+    return get_template(tpl_id, game_set)
 
 
 @app.put("/api/templates/{template_id}", response_model=TemplateOut)
-def update_template(template_id: uuid.UUID, body: TemplateCreate) -> Any:
+def update_template(template_id: uuid.UUID, body: TemplateCreate, game_set: str = Depends(get_game_set),) -> Any:
     _validate_template(body.kind, body.items)
 
     with db_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM templates WHERE id=%s", (template_id,))
+            cur.execute("SELECT 1 FROM templates WHERE id=%s AND game_set=%s", (template_id, game_set))
             if not cur.fetchone():
                 raise HTTPException(status_code=404, detail="Template not found")
 
@@ -531,9 +567,9 @@ def update_template(template_id: uuid.UUID, body: TemplateCreate) -> Any:
                 """
                 UPDATE templates
                 SET name=%s, prompt=%s, kind=%s, image_data=%s
-                WHERE id=%s
+                WHERE id=%s AND game_set=%s
                 """,
-                (body.name.strip(), body.prompt.strip(), body.kind, body.image_data, template_id),
+                (body.name.strip(), body.prompt.strip(), body.kind, body.image_data, template_id, game_set)
             )
 
             cur.execute("DELETE FROM template_items WHERE template_id=%s", (template_id,))
@@ -556,14 +592,14 @@ def update_template(template_id: uuid.UUID, body: TemplateCreate) -> Any:
 
         conn.commit()
 
-    return get_template(template_id)
+    return get_template(template_id, game_set)
 
 
 @app.delete("/api/templates/{template_id}")
-def delete_template(template_id: uuid.UUID) -> Dict[str, str]:
+def delete_template(template_id: uuid.UUID, game_set: str = Depends(get_game_set),) -> Dict[str, str]:
     with db_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM templates WHERE id=%s", (template_id,))
+            cur.execute("DELETE FROM templates WHERE id=%s AND game_set=%s", (template_id, game_set))
         conn.commit()
     return {"status": "deleted"}
 
@@ -572,12 +608,15 @@ def delete_template(template_id: uuid.UUID) -> Dict[str, str]:
 # Create runtime round from template (rated/manual/carousel)
 # =========================
 @app.post("/api/rounds/from-template", response_model=RoundOut)
-def create_round_from_template(req: CreateRoundFromTemplateRequest) -> Any:
+def create_round_from_template(
+    req: CreateRoundFromTemplateRequest,
+    game_set: str = Depends(get_game_set),
+) -> Any:
     with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, name, prompt, kind, image_data FROM templates WHERE id=%s",
-                (req.template_id,),
+                "SELECT id, name, prompt, kind, image_data FROM templates WHERE id=%s AND game_set=%s",
+                (req.template_id, game_set),
             )
             tpl = cur.fetchone()
             if not tpl:
@@ -617,11 +656,11 @@ def create_round_from_template(req: CreateRoundFromTemplateRequest) -> Any:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO rounds (category, prompt, kind, image_data, current_team, status, target_item_id)
-                VALUES (%s, %s, %s, %s, 1, 'active', '00000000-0000-0000-0000-000000000000')
+                INSERT INTO rounds (game_set, category, prompt, kind, image_data, current_team, status, target_item_id)
+                VALUES (%s, %s, %s, %s, %s, 1, 'active', '00000000-0000-0000-0000-000000000000')
                 RETURNING id
                 """,
-                (str(name), str(prompt), str(kind), image_data),
+                (game_set, str(name), str(prompt), str(kind), image_data),
             )
             (round_id,) = cur.fetchone()
 
@@ -654,13 +693,12 @@ def create_round_from_template(req: CreateRoundFromTemplateRequest) -> Any:
                 raise HTTPException(status_code=500, detail="Failed to resolve target_item_id")
 
             cur.execute(
-                "UPDATE rounds SET target_item_id=%s WHERE id=%s",
-                (target_item_id, round_id),
+                "UPDATE rounds SET target_item_id=%s WHERE id=%s AND game_set=%s",
+                (target_item_id, round_id, game_set),
             )
-
         conn.commit()
 
-    return _round_to_response(round_id)
+    return _round_to_response(round_id, game_set)
 
 
 @app.exception_handler(HTTPException)
