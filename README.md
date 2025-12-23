@@ -7,6 +7,20 @@ One wrong tap—eliminating the target itself—ends the round instantly.
 
 ## Quick start
 
-```bash
+## ```bash
 docker compose up -d --build
 
+## CICD Pipeline
+
+This project uses Jenkins for continuous deployment.
+
+Pipeline flow:
+1. Push to main branch
+2. Jenkins pulls the code from GitHub
+3. Builds Docker image
+4. Redeploys the application automatically on AWS EC2
+
+Tools used:
+- Jenkins
+- Docker
+- AWS EC2
