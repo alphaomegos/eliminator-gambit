@@ -176,10 +176,13 @@ function openItemModal({ title, image_data, text }) {
   txt.textContent = text || "";
 
   modal.classList.remove("hidden");
+  document.body.classList.add("itemModalOpen");
+  modal.classList.remove("hidden");
 }
 
 function closeItemModal() {
   el("itemModal")?.classList.add("hidden");
+  document.body.classList.remove("itemModalOpen");
 }
 
 function getTeamBox(team) {

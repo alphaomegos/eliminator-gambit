@@ -2,22 +2,36 @@ from __future__ import annotations
 
 import random
 import uuid
+
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Literal
-
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, conlist
-
 from .db import db_conn, init_pool
 from .datasets import DATASETS, list_categories
 
-app = FastAPI(title="The Eliminator’s Gambit API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_pool()
+    yield
 
+app = FastAPI(
+    title="The Eliminator’s Gambit API",
+    version="0.1.0",
+    lifespan=lifespan,
+)
 
 # =========================
 # Core round models
 # =========================
+TemplateKind = Literal["rated", "manual", "carousel"]
+RoundKind = TemplateKind
+RoundStatus = Literal["active", "finished"]
+STATUS_ACTIVE: RoundStatus = "active"
+STATUS_FINISHED: RoundStatus = "finished"
+
 class CreateRoundRequest(BaseModel):
     category: str = Field(default="movies")
 
@@ -25,12 +39,11 @@ class CreateRoundRequest(BaseModel):
 class EliminateRequest(BaseModel):
     item_id: uuid.UUID
 
-
 class ItemOut(BaseModel):
     id: uuid.UUID
     title: str
     eliminated: bool
-    eliminated_by_team: Optional[int] = None
+    eliminated_by_team: Optional[TeamId] = None
     rating: Optional[Decimal] = None
     secret_text: Optional[str] = None
     is_target: Optional[bool] = None
@@ -41,11 +54,11 @@ class RoundOut(BaseModel):
     id: uuid.UUID
     category: str
     prompt: str
-    kind: str
-    current_team: int
-    status: str
-    winner_team: Optional[int] = None
-    loser_team: Optional[int] = None
+    kind: RoundKind
+    current_team: TeamId
+    status: RoundStatus
+    winner_team: Optional[TeamId] = None
+    loser_team: Optional[TeamId] = None
     items: List[ItemOut]
     image_data: Optional[str] = None
 
@@ -53,7 +66,7 @@ class RoundOut(BaseModel):
 # =========================
 # Templates / round sets models
 # =========================
-TemplateKind = Literal["rated", "manual", "carousel"]
+TeamId = Literal[1, 2]
 
 
 class TemplateItemIn(BaseModel):
@@ -96,11 +109,6 @@ class CreateRoundFromTemplateRequest(BaseModel):
 # =========================
 # Startup / misc
 # =========================
-@app.on_event("startup")
-def _startup() -> None:
-    init_pool()
-
-
 @app.get("/api/health")
 def health() -> Dict[str, str]:
     return {"status": "ok"}
@@ -111,9 +119,7 @@ def categories() -> Dict[str, List[str]]:
 
 @app.get("/api/game-sets/{name}")
 def game_set_exists(name: str) -> dict:
-    if len(name) != 6:
-        raise HTTPException(status_code=400, detail="Game set name must be exactly 6 characters")
-
+    _validate_game_set(name)
     with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1 FROM game_sets WHERE name=%s", (name,))
@@ -140,14 +146,15 @@ def create_game_set(name: str) -> dict:
 # =========================
 # Helpers
 # =========================
-def get_game_set(x_game_set: str | None = Header(default=None)) -> str:
-    if not x_game_set:
+def _validate_game_set(name: str | None) -> str:
+    if not name:
         raise HTTPException(status_code=400, detail="X-Game-Set header is required")
-
-    if len(x_game_set) != 6:
+    if len(name) != 6:
         raise HTTPException(status_code=400, detail="Game set name must be exactly 6 characters")
+    return name
 
-    return x_game_set
+def get_game_set(x_game_set: str | None = Header(default=None)) -> str:
+    return _validate_game_set(x_game_set)
 
 def _validate_template(kind: str, items: List[TemplateItemIn]) -> None:
     if kind not in ("rated", "manual", "carousel"):
@@ -192,6 +199,63 @@ def _validate_template(kind: str, items: List[TemplateItemIn]) -> None:
                     detail="Carousel round: rating must be null",
                 )
 
+def other_team(team: TeamId) -> TeamId:
+    return 2 if team == 1 else 1
+
+
+def winner_loser_from_loser(loser: TeamId) -> tuple[TeamId, TeamId]:
+    winner = other_team(loser)
+    return winner, loser
+
+def _finish_round(
+    cur,
+    *,
+    round_id: uuid.UUID,
+    game_set: str,
+    winner_team: TeamId | None,
+    loser_team: TeamId | None,
+) -> None:
+    cur.execute(
+        """
+        UPDATE rounds
+        SET status=%s, winner_team=%s, loser_team=%s
+        WHERE id=%s AND game_set=%s
+        """,
+        (STATUS_FINISHED, winner_team, loser_team, round_id, game_set),
+    )
+
+def repo_get_round(cur, *, round_id: uuid.UUID, game_set: str):
+    cur.execute(
+        """
+        SELECT id, kind, status, current_team, target_item_id
+        FROM rounds
+        WHERE id=%s AND game_set=%s
+        """,
+        (round_id, game_set),
+    )
+    return cur.fetchone()
+
+
+def repo_eliminate_item(cur, *, item_id: uuid.UUID, round_id: uuid.UUID, team: TeamId):
+    cur.execute(
+        """
+        UPDATE items
+        SET eliminated = true, eliminated_by_team = %s
+        WHERE id = %s AND round_id = %s
+        """,
+        (team, item_id, round_id),
+    )
+
+def repo_remaining_items(cur, *, round_id: uuid.UUID, game_set: str) -> list[uuid.UUID]:
+    cur.execute(
+        """
+        SELECT id
+        FROM items
+        WHERE round_id=%s AND game_set=%s AND eliminated_by_team IS NULL
+        """,
+        (round_id, game_set),
+    )
+    return [row["id"] for row in cur.fetchall()]
 
 def _round_to_response(round_id: uuid.UUID, game_set: str) -> RoundOut:
     with db_conn() as conn:
@@ -231,9 +295,7 @@ def _round_to_response(round_id: uuid.UUID, game_set: str) -> RoundOut:
                 (rid,),
             )
             items_rows = cur.fetchall()
-
-    reveal_all = status == "finished"
-
+    reveal_all = str(status) == STATUS_FINISHED
     items: List[ItemOut] = []
     for iid, title, eliminated, rating, secret_text, eliminated_by_team, item_image_data in items_rows:
         show_hidden = reveal_all or bool(eliminated)
@@ -290,10 +352,10 @@ def create_round(req: CreateRoundRequest, game_set: str = Depends(get_game_set),
             cur.execute(
                 """
                 INSERT INTO rounds (game_set, category, prompt, kind, current_team, status, target_item_id)
-                VALUES (%s, %s, %s, 'rated', 1, 'active', '00000000-0000-0000-0000-000000000000')
+                VALUES (%s, %s, %s, 'rated', 1, %s, '00000000-0000-0000-0000-000000000000')
                 RETURNING id
                 """,
-                (game_set, category, prompt),
+                (game_set, category, prompt, STATUS_ACTIVE),
             )
             (round_id,) = cur.fetchone()
             item_ids: Dict[str, uuid.UUID] = {}
@@ -329,20 +391,11 @@ def get_round(round_id: uuid.UUID, game_set: str = Depends(get_game_set)) -> Any
 def eliminate(round_id: uuid.UUID, req: EliminateRequest, game_set: str = Depends(get_game_set)) -> Any:
     with db_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT current_team, status, target_item_id
-                FROM rounds
-                WHERE id = %s AND game_set = %s
-                """,
-                (round_id, game_set),
-            )
-            row = cur.fetchone()
+            row = repo_get_round(cur, round_id=round_id, game_set=game_set)
             if not row:
                 raise HTTPException(status_code=404, detail="Round not found")
-
-            current_team, status, target_item_id = row
-            if status != "active":
+            _rid, kind, status, current_team, target_item_id = row
+            if str(status) != STATUS_ACTIVE:
                 raise HTTPException(status_code=409, detail="Round already finished")
 
             cur.execute(
@@ -358,29 +411,23 @@ def eliminate(round_id: uuid.UUID, req: EliminateRequest, game_set: str = Depend
                 raise HTTPException(status_code=404, detail="Item not found")
             if bool(item_row[0]):
                 raise HTTPException(status_code=409, detail="Item already eliminated")
-
-            cur.execute(
-                """
-                UPDATE items
-                SET eliminated = true,
-                    eliminated_by_team = %s,
-                    eliminated_at = now()
-                WHERE id = %s AND round_id = %s
-                """,
-                (current_team, req.item_id, round_id),
+            repo_eliminate_item(
+                cur,
+                item_id=req.item_id,
+                round_id=round_id,
+                team=current_team,
             )
 
             # Picked the target -> immediate loss for current team.
             if req.item_id == target_item_id:
                 loser = int(current_team)
-                winner = 2 if loser == 1 else 1
-                cur.execute(
-                    """
-                    UPDATE rounds
-                    SET status='finished', winner_team=%s, loser_team=%s
-                    WHERE id=%s AND game_set=%s
-                    """,
-                    (winner, loser, round_id, game_set),
+                winner, loser = winner_loser_from_loser(loser)
+                _finish_round(
+                    cur,
+                    round_id=round_id,
+                    game_set=game_set,
+                    winner_team=winner,
+                    loser_team=loser,
                 )
                 conn.commit()
                 return _round_to_response(round_id, game_set)
@@ -405,31 +452,29 @@ def eliminate(round_id: uuid.UUID, req: EliminateRequest, game_set: str = Depend
                 remaining_item_id = remaining_row[0] if remaining_row else None
 
                 if remaining_item_id == target_item_id:
-                    cur.execute(
-                        """
-                        UPDATE rounds
-                        SET status='finished', winner_team=NULL, loser_team=NULL
-                        WHERE id=%s AND game_set=%s
-                        """,
-                        (round_id, game_set),
+                    _finish_round(
+                        cur,
+                        round_id=round_id,
+                        game_set=game_set,
+                        winner_team=None,
+                        loser_team=None,
                     )
                     conn.commit()
                     return _round_to_response(round_id, game_set)
 
                 winner = int(current_team)
-                loser = 2 if winner == 1 else 1
-                cur.execute(
-                    """
-                    UPDATE rounds
-                    SET status='finished', winner_team=%s, loser_team=%s
-                    WHERE id=%s AND game_set=%s
-                    """,
-                    (winner, loser, round_id, game_set),
+                loser = other_team(winner)
+                _finish_round(
+                    cur,
+                    round_id=round_id,
+                    game_set=game_set,
+                    winner_team=winner,
+                    loser_team=loser,
                 )
                 conn.commit()
                 return _round_to_response(round_id, game_set)
 
-            next_team = 2 if int(current_team) == 1 else 1
+            next_team = other_team(current_team)
             cur.execute(
                 "UPDATE rounds SET current_team=%s WHERE id=%s AND game_set=%s",
                 (next_team, round_id, game_set),
@@ -657,10 +702,10 @@ def create_round_from_template(
             cur.execute(
                 """
                 INSERT INTO rounds (game_set, category, prompt, kind, image_data, current_team, status, target_item_id)
-                VALUES (%s, %s, %s, %s, %s, 1, 'active', '00000000-0000-0000-0000-000000000000')
+                VALUES (%s, %s, %s, %s, %s, 1, %s, '00000000-0000-0000-0000-000000000000')
                 RETURNING id
                 """,
-                (game_set, str(name), str(prompt), str(kind), image_data),
+                (game_set, str(name), str(prompt), str(kind), image_data, STATUS_ACTIVE),
             )
             (round_id,) = cur.fetchone()
 
@@ -704,4 +749,3 @@ def create_round_from_template(
 @app.exception_handler(HTTPException)
 def http_exception_handler(_, exc: HTTPException) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-
