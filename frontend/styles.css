@@ -39,7 +39,7 @@ body.modeGame .page { padding-top: 14px; }
   .page { max-width: 1920px; }
 }
 
-/* Header (menu screens) */
+/* Header */
 .header {
   display: flex;
   align-items: flex-end;
@@ -71,7 +71,12 @@ body.modeGame .page { padding-top: 14px; }
   cursor: not-allowed;
 }
 
-.main { display: flex; flex-direction: column; gap: 14px; }
+.main,
+.editorWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
 
 .card {
   background: linear-gradient(180deg, var(--panel), var(--panel2));
@@ -112,14 +117,13 @@ body.modeGame .page { padding-top: 14px; }
 
 /* Show Image button should never overlap long titles */
 .item.hasImage {
-  /* Reserve space at the bottom for the button */
-  padding-bottom: 56px; /* 12px base padding + room for button */
+  padding-bottom: 56px; 
 }
 
 /* Left content column (title + meta) should flex correctly */
 .item > div:first-child {
   flex: 1 1 auto;
-  min-width: 0; /* important for proper shrinking/wrapping */
+  min-width: 0;
 }
 
 /* Place the button in the reserved bottom area */
@@ -201,7 +205,8 @@ body.modeGame .page { padding-top: 14px; }
 /* Forms */
 .form { display: flex; flex-direction: column; gap: 12px; }
 .formRow { display: flex; flex-direction: column; gap: 6px; }
-.label { color: var(--muted); font-size: 12px; }
+.label,
+.mutedSmall { color: var(--muted); font-size: 12px; }
 .formActions { display: flex; gap: 10px; margin-top: 6px; }
 .editorImageActions {
   display: flex;
@@ -263,8 +268,6 @@ body.modeGame .page { padding-top: 14px; }
   margin-top: 6px;
 }
 
-.mutedSmall { color: var(--muted); font-size: 12px; }
-
 .tplItems {
   display: flex;
   flex-direction: column;
@@ -278,16 +281,9 @@ body.modeGame .page { padding-top: 14px; }
   gap: 10px;
 }
 
-.editorWrap { display: flex; flex-direction: column; gap: 14px; }
 .editorTop { max-width: 560px; margin: 0 auto; }
 
-@media (max-width: 900px) {
-  .editor { grid-template-columns: 1fr; }
-}
-
-/* =========================
-   GAME (current HTML: .gameLayout)
-   ========================= */
+/* ==GAME== */
 .gameLayout {
   display: grid;
   gap: 18px;
@@ -305,12 +301,6 @@ body.modeGame .page { padding-top: 14px; }
   align-items: center; /* prevent full-width stretching of children */
 }
 
-/* Round image as full background of the center header card */
-#screenGame .gameHeaderCard {
-  position: relative;
-  overflow: hidden;
-}
-
 #screenGame .gameHeaderCard > #roundImageFrame {
   position: absolute;
   inset: 0;
@@ -318,13 +308,6 @@ body.modeGame .page { padding-top: 14px; }
   overflow: hidden;
   z-index: 0;
   pointer-events: none; /* never blocks clicks */
-}
-
-#screenGame .gameHeaderCard > #roundImageFrame img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
 }
 
 #screenGame .gameHeaderCard > :not(#roundImageFrame) {
@@ -335,23 +318,23 @@ body.modeGame .page { padding-top: 14px; }
 .gameBrand .title { margin: 0; }
 .gameBrand .subtitle { margin-top: 4px; }
 
-/* Keep Menu button in the top-right corner and readable */
-.gameMenuBtn {
+/* Keep Menu button in the top-right corner and readable (game header only) */
+#screenGame .gameHeaderCard #menuBtn {
   position: absolute;
   top: 12px;
   right: 12px;
-  z-index: 6;
+  z-index: 10;
   width: auto;
   padding: 8px 12px;
   border-radius: 999px;
-  background: rgba(0,0,0,0.38);
-  border-color: rgba(255,255,255,0.14);
+  background: rgba(0,0,0,0.42);
+  border: 1px solid rgba(255,255,255,0.16);
   color: var(--text);
 }
 
-.gameMenuBtn:hover {
-  background: rgba(0,0,0,0.48);
-  border-color: rgba(255,255,255,0.20);
+#screenGame .gameHeaderCard #menuBtn:hover {
+  background: rgba(0,0,0,0.52);
+  border-color: rgba(255,255,255,0.22);
 }
 
 /* team cards */
@@ -408,8 +391,15 @@ body.modeGame .page { padding-top: 14px; }
 }
 .roundImageFrame.hidden { display: none; }
 
+#screenGame .gameHeaderCard > #roundImageFrame img,
+#roundMedia #roundImageFrame img,
 #roundImage,
-.roundImage {
+.roundImage,
+.showAllItem img,
+#itemModalImage,
+.carouselImgWrap img,
+.carouselItem img,
+.tplItemThumb {
   display: block;
   width: 100%;
   height: 100%;
@@ -424,10 +414,6 @@ body.modeGame .page { padding-top: 14px; }
     align-items: stretch;
   }
 
-  #team1Box { grid-column: 1; grid-row: 1; height: var(--game-top-h); }
-  .gameHeaderCard { grid-column: 2; grid-row: 1; height: var(--game-top-h); }
-  #team2Box { grid-column: 3; grid-row: 1; height: var(--game-top-h); }
-
   #itemsList {
     grid-column: 1 / -1;
     grid-row: 2;
@@ -439,7 +425,6 @@ body.modeGame .page { padding-top: 14px; }
     list-style-position: inside;
   }
 
-  /* image takes remaining height inside header card */
   #screenGame .roundImageFrame {
     margin-top: 10px;
 
@@ -530,26 +515,6 @@ body.modeGame .page { padding-top: 14px; }
 }
 
 /* Buttons in header corners */
-#screenGame .gameHeaderCard #menuBtn.gameMenuBtn {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 10;
-
-  width: auto;
-  padding: 8px 12px;
-  border-radius: 999px;
-
-  background: rgba(0,0,0,0.42);
-  border-color: rgba(255,255,255,0.16);
-  color: var(--text);
-}
-
-#screenGame .gameHeaderCard #menuBtn.gameMenuBtn:hover {
-  background: rgba(0,0,0,0.52);
-  border-color: rgba(255,255,255,0.22);
-}
-
 #screenGame .gameHeaderCard #nextRoundBtn,
 #screenGame .gameHeaderCard .gameNextBtn {
   position: absolute;
@@ -567,8 +532,6 @@ body.modeGame .page { padding-top: 14px; }
   bottom: 12px;
   z-index: 10;
   width: auto;
-
-  /* optional: make it readable on top of an image (same vibe as Menu) */
   padding: 8px 12px;
   border-radius: 999px;
   background: rgba(0,0,0,0.38);
@@ -582,8 +545,6 @@ body.modeGame .page { padding-top: 14px; }
   border-color: rgba(255,255,255,0.22);
 }
 
-/* If Next round is still rendered inside answers/carousel via overlay — hide it.
-   We want ONLY the top-left header button. */
 .nextRoundOverlay { display: none !important; }
 
 /* Bright green button */
@@ -625,13 +586,6 @@ body.modeGame .page { padding-top: 14px; }
   border-radius: 16px;
   background: rgba(255,255,255,0.02);
   box-shadow: inset 0 0 0 1px var(--border);
-}
-
-.carouselImgWrap img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
 }
 
 .carouselCaption {
@@ -681,13 +635,6 @@ body.modeGame .page { padding-top: 14px; }
   box-shadow: inset 0 0 0 1px var(--border);
 }
 
-.tplItemThumb {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
 .tplItemImgBtn { padding: 10px 12px; }
 
 /* Make the whole game screen fill the viewport */
@@ -722,13 +669,6 @@ body.modeGame .page { padding-top: 14px; }
   height: 100%;
   border-radius: 18px;
   overflow: hidden;
-}
-
-#roundMedia #roundImageFrame img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
 }
 
 /* Carousel */
@@ -783,13 +723,6 @@ body.modeGame .page { padding-top: 14px; }
   text-shadow: 0 1px 2px rgba(0,0,0,0.9);
 }
 
-.carouselItem img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-}
-
 .carouselBtn {
   width: 44px;
   height: 44px;
@@ -818,32 +751,20 @@ body.modeGame .page { padding-top: 14px; }
   box-shadow: inset 0 0 0 3px rgba(255, 77, 109, 0.55);
 }
 
-.gameNextBtn {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 6;
-}
-
 #carouselFrame .carouselBtn {
   background: rgba(57, 217, 138, 0.16);
   border-color: rgba(57, 217, 138, 0.60);
   color: var(--ok);
   box-shadow: 0 10px 30px rgba(57, 217, 138, 0.14);
-
   width: 44px;
   height: 44px;
   padding: 0;
   box-sizing: border-box;
-
   display: inline-flex;
   align-items: center;
   justify-content: center;
-
-  /* hide the font glyph (‹ ›) — we'll draw the arrow ourselves */
   font-size: 0;
   line-height: 0;
-
   position: relative;
 }
 
@@ -853,10 +774,8 @@ body.modeGame .page { padding-top: 14px; }
   width: 12px;
   height: 12px;
   box-sizing: border-box;
-
   border: solid currentColor;
   border-width: 0 3px 3px 0;
-
   display: block;
 }
 
@@ -876,11 +795,6 @@ body.modeGame .page { padding-top: 14px; }
   border-radius: 14px;
   padding: 10px 14px;
   box-shadow: 0 8px 22px rgba(0,0,0,0.35);
-}
-
-#screenGame .gameHeaderCard .gameBrand,
-#screenGame .gameHeaderCard #prompt,
-#screenGame .gameHeaderCard #roundStatus {
   width: fit-content;
   max-width: 100%;
   margin-left: auto;
@@ -935,13 +849,6 @@ body.showAllOpen { overflow: hidden; }
   pointer-events: none;
 }
 
-.showAllItem img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-}
-
 .showAllItem.eliminatedCard {
   opacity: 0.28;
   filter: grayscale(1);
@@ -982,7 +889,7 @@ body.showAllOpen { overflow: hidden; }
   border-color: rgba(255,255,255,0.22);
 }
 
-/* Force modal centering (override any later/earlier rules) */
+/* Force modal centering */
 .modal {
   position: fixed;
   inset: 0;
@@ -999,6 +906,7 @@ body.showAllOpen { overflow: hidden; }
 .modalCard {
   width: 100%;
   max-width: 520px;
+  margin: 0 auto;
   background: linear-gradient(180deg, var(--panel), var(--panel2));
   border: 1px solid var(--border);
   border-radius: 18px;
@@ -1018,15 +926,4 @@ body.showAllOpen { overflow: hidden; }
   background: rgba(255,255,255,0.02);
   box-shadow: inset 0 0 0 1px var(--border);
   aspect-ratio: 16 / 9;
-}
-
-#itemModalImage {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.modalCard {
-  margin: 0 auto; /* fallback if centering is ever affected */
 }
