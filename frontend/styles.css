@@ -9,6 +9,14 @@
   --ok: #39d98a;
   --card-pad: 14px;
   --game-top-h: 180px;
+  --pill-bg: rgba(0,0,0,0.42);
+  --pill-bg-hover: rgba(0,0,0,0.52);
+  --pill-border: rgba(255,255,255,0.16);
+  --pill-border-hover: rgba(255,255,255,0.22);
+  --caption-bg: rgba(0, 0, 0, 0.72);
+  --caption-radius: 12px;
+  --caption-shadow: 0 6px 18px rgba(0,0,0,0.35);
+  --caption-text-shadow: 0 1px 2px rgba(0,0,0,0.6);
 }
 
 * { box-sizing: border-box; }
@@ -78,12 +86,16 @@ body.modeGame .page { padding-top: 14px; }
   gap: 14px;
 }
 
-.card {
+/* Panel cards */
+.card,
+.sideTeam,
+.editorList {
   background: linear-gradient(180deg, var(--panel), var(--panel2));
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: var(--card-pad);
 }
+
+.card { padding: var(--card-pad); }
 
 .prompt { font-size: 16px; font-weight: 650; }
 .hint { margin-top: 8px; color: var(--muted); font-size: 13px; }
@@ -133,25 +145,11 @@ body.modeGame .page { padding-top: 14px; }
   bottom: 12px;
   top: auto;
   transform: none;
-
   z-index: 5;
-
-  padding: 8px 12px;
-  border-radius: 999px;
-
-  background: rgba(0, 0, 0, 0.38);
-  border-color: rgba(255, 255, 255, 0.16);
-  color: var(--text);
-
   opacity: 0.9;
 }
 
-
-.item.hasImage:hover .showImageBtn {
-  opacity: 1;
-  background: rgba(0, 0, 0, 0.48);
-  border-color: rgba(255, 255, 255, 0.22);
-}
+.item.hasImage:hover .showImageBtn { opacity: 1; }
 
 .itemTitle { font-size: 18px; font-weight: 600; line-height: 1.15; }
 .itemMeta { color: var(--muted); font-size: 12px; margin-top: 3px; }
@@ -179,9 +177,6 @@ body.modeGame .page { padding-top: 14px; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-/* Screens */
-.screen.hidden { display: none; }
 
 /* Menu */
 .menuGrid {
@@ -222,9 +217,6 @@ body.modeGame .page { padding-top: 14px; }
 }
 
 .editorList {
-  background: linear-gradient(180deg, var(--panel), var(--panel2));
-  border: 1px solid var(--border);
-  border-radius: 16px;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -284,11 +276,6 @@ body.modeGame .page { padding-top: 14px; }
 .editorTop { max-width: 560px; margin: 0 auto; }
 
 /* ==GAME== */
-.gameLayout {
-  display: grid;
-  gap: 18px;
-}
-
 /* default (mobile-ish): stack */
 #itemsList { margin-top: 0; }
 
@@ -318,42 +305,50 @@ body.modeGame .page { padding-top: 14px; }
 .gameBrand .title { margin: 0; }
 .gameBrand .subtitle { margin-top: 4px; }
 
-/* Keep Menu button in the top-right corner and readable (game header only) */
+/* Pill button look */
+#screenGame .gameHeaderCard #menuBtn,
+#screenGame .gameHeaderCard #showAllBtn,
+#screenGame .gameHeaderCard .showAllBtn,
+.showAllClose,
+.showImageBtn {
+  width: auto;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-border);
+  color: var(--text);
+}
+
+#screenGame .gameHeaderCard #menuBtn:hover,
+
+#screenGame .gameHeaderCard #showAllBtn:hover:not(:disabled),
+#screenGame .gameHeaderCard .showAllBtn:hover:not(:disabled),
+.showAllClose:hover,
+.item.hasImage:hover .showImageBtn {
+  background: var(--pill-bg-hover);
+  border-color: var(--pill-border-hover);
+}
+
+
+/* Keep Menu button in the top-right corner (game header only) */
 #screenGame .gameHeaderCard #menuBtn {
   position: absolute;
   top: 12px;
   right: 12px;
   z-index: 10;
-  width: auto;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(0,0,0,0.42);
-  border: 1px solid rgba(255,255,255,0.16);
-  color: var(--text);
-}
-
-#screenGame .gameHeaderCard #menuBtn:hover {
-  background: rgba(0,0,0,0.52);
-  border-color: rgba(255,255,255,0.22);
 }
 
 /* team cards */
 .sideTeam {
-  background: linear-gradient(180deg, var(--panel), var(--panel2));
-  border: 1px solid var(--border);
-  border-radius: 16px;
   padding: 18px 14px;
-
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-
   text-align: center;
   font-size: 22px;
   font-weight: 800;
   color: var(--muted);
-
   flex-direction: column;
 }
 
@@ -382,14 +377,19 @@ body.modeGame .page { padding-top: 14px; }
 .roundStatus.win { color: var(--ok); }
 .roundStatus.tie { color: var(--danger); }
 
-/* Round image (game): full-bleed inside header card */
-.roundImageFrame {
-  border-radius: 14px;
+/* Media frames */
+.roundImageFrame,
+.carouselImgWrap,
+.tplItemThumbWrap,
+.itemModalImageWrap,
+.carouselItem,
+.showAllItem {
   overflow: hidden;
   background: rgba(255,255,255,0.02);
   box-shadow: inset 0 0 0 1px var(--border);
 }
-.roundImageFrame.hidden { display: none; }
+
+.roundImageFrame { border-radius: 14px; }
 
 #screenGame .gameHeaderCard > #roundImageFrame img,
 #roundMedia #roundImageFrame img,
@@ -408,10 +408,9 @@ body.modeGame .page { padding-top: 14px; }
 
 /* Wide screens layout: 3 top blocks + answers below */
 @media (min-width: 1200px) {
-  .gameLayout {
-    grid-template-columns: 260px 1fr 260px;
+  #screenGame .gameLayout {
+    --side-w: 260px;
     grid-template-rows: var(--game-top-h) auto;
-    align-items: stretch;
   }
 
   #itemsList {
@@ -444,7 +443,7 @@ body.modeGame .page { padding-top: 14px; }
 @media (max-width: 980px) {
   .page { padding: 16px; }
 
-  .gameLayout {
+  #screenGame .gameLayout {
     grid-template-columns: 1fr;
     grid-template-rows: auto;
   }
@@ -458,6 +457,7 @@ body.modeGame .page { padding-top: 14px; }
 
   .sideTeam { height: auto; }
   .editor { grid-template-columns: 1fr; }
+  #carouselFrame { --visible: 3; }
 }
 
 /* Losing pick: highlight in red */
@@ -531,18 +531,6 @@ body.modeGame .page { padding-top: 14px; }
   right: 12px;
   bottom: 12px;
   z-index: 10;
-  width: auto;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(0,0,0,0.38);
-  border-color: rgba(255,255,255,0.14);
-  color: var(--text);
-}
-
-#screenGame .gameHeaderCard #showAllBtn:hover:not(:disabled),
-#screenGame .gameHeaderCard .showAllBtn:hover:not(:disabled) {
-  background: rgba(0,0,0,0.48);
-  border-color: rgba(255,255,255,0.22);
 }
 
 .nextRoundOverlay { display: none !important; }
@@ -582,10 +570,17 @@ body.modeGame .page { padding-top: 14px; }
 
 .carouselImgWrap {
   aspect-ratio: 16 / 9;
-  overflow: hidden;
   border-radius: 16px;
-  background: rgba(255,255,255,0.02);
-  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+/* Image caption overlay (shared) */
+.carouselCaption,
+.showAllCaption,
+.itemCaption {
+  background: var(--caption-bg);
+  border-radius: var(--caption-radius);
+  box-shadow: var(--caption-shadow);
+  text-shadow: var(--caption-text-shadow);
 }
 
 .carouselCaption {
@@ -630,11 +625,7 @@ body.modeGame .page { padding-top: 14px; }
   width: 92px;
   aspect-ratio: 16 / 9;
   border-radius: 12px;
-  overflow: hidden;
-  background: rgba(255,255,255,0.02);
-  box-shadow: inset 0 0 0 1px var(--border);
 }
-
 .tplItemImgBtn { padding: 10px 12px; }
 
 /* Make the whole game screen fill the viewport */
@@ -645,9 +636,10 @@ body.modeGame .page { padding-top: 14px; }
 #screenGame { height: 100dvh; }
 
 #screenGame .gameLayout {
+  --side-w: 220px;
   height: 100%;
   display: grid;
-  grid-template-columns: 220px minmax(320px, 1fr) 220px;
+  grid-template-columns: var(--side-w) minmax(320px, 1fr) var(--side-w);
   grid-template-rows: var(--game-top-h) 1fr;
   gap: 16px;
   align-items: stretch;
@@ -700,12 +692,8 @@ body.modeGame .page { padding-top: 14px; }
   flex: 0 0 calc((100% - (var(--gap) * (var(--visible) - 1))) / var(--visible));
   height: 100%;
   border-radius: 18px;
-  overflow: hidden;
   cursor: pointer;
   position: relative;
-
-  background: rgba(255,255,255,0.02);
-  box-shadow: inset 0 0 0 1px var(--border);
 }
 
 .carouselItem .carouselCaption {
@@ -713,14 +701,10 @@ body.modeGame .page { padding-top: 14px; }
   left: 0;
   right: 0;
   top: 0;
-
   padding: 12px 14px;
   font-size: 18px;
   font-weight: 800;
   line-height: 1.2;
-
-  background: rgba(0, 0, 0, 0.72);
-  text-shadow: 0 1px 2px rgba(0,0,0,0.9);
 }
 
 .carouselBtn {
@@ -735,9 +719,6 @@ body.modeGame .page { padding-top: 14px; }
 }
 
 /* Responsive: fewer visible cards on small screens */
-@media (max-width: 980px) {
-  #carouselFrame { --visible: 3; }
-}
 @media (max-width: 560px) {
   #carouselFrame { --visible: 2; }
 }
@@ -756,13 +737,6 @@ body.modeGame .page { padding-top: 14px; }
   border-color: rgba(57, 217, 138, 0.60);
   color: var(--ok);
   box-shadow: 0 10px 30px rgba(57, 217, 138, 0.14);
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   font-size: 0;
   line-height: 0;
   position: relative;
@@ -839,13 +813,8 @@ body.showAllOpen { overflow: hidden; }
 
 .showAllItem {
   border-radius: 16px;
-  overflow: hidden;
-  background: rgba(255,255,255,0.02);
-  box-shadow: inset 0 0 0 1px var(--border);
-
   position: relative;
   aspect-ratio: 16 / 9;
-
   pointer-events: none;
 }
 
@@ -859,34 +828,19 @@ body.showAllOpen { overflow: hidden; }
   left: 0;
   right: 0;
   bottom: 0;
-
   text-align: center;
   display: flex;
   align-items: center;
   justify-content: center;
-
   padding: 10px 12px;
   font-weight: 800;
   font-size: 14px;
   line-height: 1.2;
-
-  background: rgba(0, 0, 0, 0.72);
-  text-shadow: 0 1px 2px rgba(0,0,0,0.9);
 }
 
 .showAllClose {
   margin: 16px auto 0;
   width: 180px;
-  border-radius: 999px;
-
-  background: rgba(0,0,0,0.42);
-  border-color: rgba(255,255,255,0.16);
-  color: var(--text);
-}
-
-.showAllClose:hover {
-  background: rgba(0,0,0,0.52);
-  border-color: rgba(255,255,255,0.22);
 }
 
 /* Force modal centering */
@@ -900,8 +854,6 @@ body.showAllOpen { overflow: hidden; }
   justify-content: center;
   padding: 22px;
 }
-
-.modal.hidden { display: none; }
 
 .modalCard {
   width: 100%;
@@ -922,8 +874,5 @@ body.showAllOpen { overflow: hidden; }
 .itemModalImageWrap {
   margin-top: 12px;
   border-radius: 14px;
-  overflow: hidden;
-  background: rgba(255,255,255,0.02);
-  box-shadow: inset 0 0 0 1px var(--border);
   aspect-ratio: 16 / 9;
 }
