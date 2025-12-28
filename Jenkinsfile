@@ -1,31 +1,55 @@
 pipeline {
   agent any
 
+  options {
+    timestamps()
+  }
+
+  environment {
+    // Will be set in "Detect Compose"
+    COMPOSE = ""
+  }
+
   stages {
     stage('Checkout') {
       steps {
-        git 'https://github.com/USERNAME/eliminators-gambit.git'
+        checkout scm
       }
     }
 
-    stage('Build Docker image') {
+    stage('Detect Compose') {
       steps {
-        sh 'docker build -t eliminators-gambit:latest .'
+        script {
+          env.COMPOSE = sh(
+            script: 'docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose"',
+            returnStdout: true
+          ).trim()
+        }
+      }
+    }
+
+    stage('Unit tests') {
+      steps {
+        sh 'make COMPOSE="$COMPOSE" test'
+      }
+    }
+
+    stage('Integration tests') {
+      steps {
+        sh 'make COMPOSE="$COMPOSE" itest'
       }
     }
 
     stage('Deploy') {
+      when {
+        branch 'main'
+      }
       steps {
         sh '''
-          docker stop eliminators || true
-          docker rm eliminators || true
-          docker run -d \
-            --name eliminators \
-            -p 3000:3000 \
-            eliminators-gambit:latest
+          set -e
+          $COMPOSE up -d --no-deps --force-recreate api web
         '''
       }
     }
   }
 }
-

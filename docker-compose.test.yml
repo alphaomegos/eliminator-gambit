@@ -1,0 +1,32 @@
+services:
+  test-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: eliminator
+      POSTGRES_PASSWORD: eliminator
+      POSTGRES_DB: eliminator
+    volumes:
+      - pgdata_test:/var/lib/postgresql/data
+      - ./db:/db:ro,Z
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro,Z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eliminator -d eliminator"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  test:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://eliminator:eliminator@test-db:5432/eliminator
+      PYTHONPATH: /app
+    depends_on:
+      test-db:
+        condition: service_healthy
+    volumes:
+      - ./backend/app:/app/app:ro,Z
+    command: ["pytest", "-q", "-c", "app/pytest.ini", "-m", "integration", "app/tests_integration"]
+
+volumes:
+  pgdata_test:
+
