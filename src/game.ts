@@ -109,3 +109,8 @@ export function validateTemplateItems(kind: RoundKind, items: TemplateItemInput[
   });
   return errors;
 }
+
+/** Points to take back when the given elimination is undone. */
+export function undoPoints(itemId: string, targetItemId: string): number {
+  return itemId === targetItemId ? TARGET_PICK_POINTS : SAFE_PICK_POINTS;
+}

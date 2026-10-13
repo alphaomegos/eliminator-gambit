@@ -1,5 +1,5 @@
 import { ApiError, get, post } from "./api.js";
-import { $, activeScreen, alertError, h, isDialogOpen, showDialog, toggle } from "./dom.js";
+import { $, activeScreen, alertError, confirmDialog, h, isDialogOpen, showDialog, toggle } from "./dom.js";
 
 let match = null;
 let carouselIndex = 0;
@@ -45,6 +45,7 @@ function renderHeader() {
   else $("roundImage").removeAttribute("src");
 
   toggle($("gameNext"), match.has_next && match.status === "active");
+  toggle($("gameUndo"), canUndo());
   toggle($("showAllBtn"), round.kind === "carousel");
 }
 
@@ -199,6 +200,31 @@ async function eliminate(itemId) {
   }
 }
 
+function canUndo() {
+  return !!match?.last_elimination && (match.status === "active" || match.round.status === "finished");
+}
+
+async function undo() {
+  if (pending || !canUndo()) return;
+  const last = match.last_elimination;
+  const ok = await confirmDialog(
+    "Undo last move?",
+    `“${last.title}” comes back into play, ${teamName(last.team)} gets the turn back and the points for that move are taken back.`,
+    { ok: "Undo" },
+  );
+  if (!ok) return;
+  pending = true;
+  try {
+    match = await post(`/api/matches/${match.id}/undo`);
+    render();
+  } catch (e) {
+    await alertError(e);
+    await refresh();
+  } finally {
+    pending = false;
+  }
+}
+
 async function nextRound() {
   if (pending) return;
   pending = true;
@@ -272,6 +298,7 @@ export function initGame({ onMenu }) {
   onExit = onMenu;
   $("gameMenu").addEventListener("click", onMenu);
   $("gameNext").addEventListener("click", nextRound);
+  $("gameUndo").addEventListener("click", undo);
   $("showAllBtn").addEventListener("click", openShowAll);
   $("showAllClose").addEventListener("click", closeShowAll);
   $("carouselPrev").addEventListener("click", () => moveCarousel(-1));
@@ -281,6 +308,11 @@ export function initGame({ onMenu }) {
   document.addEventListener("keydown", (e) => {
     if (activeScreen() !== "screenGame" || isDialogOpen()) return;
     if (e.key === "Escape" && !$("showAllOverlay").classList.contains("hidden")) closeShowAll();
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      undo();
+      return;
+    }
     if (match?.round.kind !== "carousel" || e.target.closest?.("input,textarea,select")) return;
     if (e.key === "ArrowLeft") moveCarousel(-1);
     if (e.key === "ArrowRight") moveCarousel(1);

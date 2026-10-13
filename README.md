@@ -77,4 +77,5 @@ CI (`.github/workflows/ci.yml`) only runs typecheck and tests on pushes and PRs;
 | POST | `/api/matches` | `{team1, team2, plan: ["template:<id>" \| "builtin:movies", …]}` |
 | GET  | `/api/matches/current`, `/api/matches/:id` | resume a match |
 | POST | `/api/matches/:id/eliminate` | `{item_id}` |
+| POST | `/api/matches/:id/undo` | take back the last elimination of the current round |
 | POST | `/api/matches/:id/next`, `/api/matches/:id/end` | advance / stop |

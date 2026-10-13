@@ -168,6 +168,47 @@ describe("matches", () => {
     expect((await call("GET", "/api/matches/current")).data.match).toBeNull();
   });
 
+  it("undoes eliminations, restoring scores, turn and finished rounds", async () => {
+    await login("UNDO01");
+    const tpl = (await call("POST", "/api/templates", manualTemplate())).data;
+    let m = (await call("POST", "/api/matches", { plan: [`template:${tpl.id}`] })).data;
+    expect(m.last_elimination).toBeNull();
+    expect((await call("POST", `/api/matches/${m.id}/undo`)).status).toBe(409);
+
+    const paris = m.round.items.find((i: any) => i.title === "Paris");
+    const sydney = m.round.items.find((i: any) => i.title === "Sydney");
+    m = (await call("POST", `/api/matches/${m.id}/eliminate`, { item_id: paris.id })).data; // team 1 +1
+    expect(m.last_elimination).toMatchObject({ item_id: paris.id, team: 1 });
+    m = (await call("POST", `/api/matches/${m.id}/eliminate`, { item_id: sydney.id })).data; // team 2 −4, match over
+    expect(m.status).toBe("finished");
+    expect([m.score1, m.score2]).toEqual([1, -4]);
+
+    // Undo the target hit: round and match reopen, team 2 to move again
+    m = (await call("POST", `/api/matches/${m.id}/undo`)).data;
+    expect(m.event).toMatchObject({ kind: "undo", item_id: sydney.id, team: 2, points: 4 });
+    expect(m.status).toBe("active");
+    expect(m.round.status).toBe("active");
+    expect(m.round.current_team).toBe(2);
+    expect(m.round.winner_team).toBeNull();
+    expect([m.score1, m.score2]).toEqual([1, 0]);
+    expect(m.round.items.find((i: any) => i.id === sydney.id)).toMatchObject({ eliminated: false, secret_text: null, is_target: null });
+
+    // Undo the safe pick too
+    m = (await call("POST", `/api/matches/${m.id}/undo`)).data;
+    expect([m.score1, m.score2]).toEqual([0, 0]);
+    expect(m.round.current_team).toBe(1);
+    expect(m.last_elimination).toBeNull();
+
+    // Play continues normally after undo
+    m = (await call("POST", `/api/matches/${m.id}/eliminate`, { item_id: sydney.id })).data;
+    expect(m.event.kind).toBe("hit_target");
+    expect(m.score1).toBe(-4);
+
+    // A finished match replaced by a newer one can't be reopened
+    await call("POST", "/api/matches", { plan: ["builtin:movies"] });
+    expect((await call("POST", `/api/matches/${m.id}/undo`)).status).toBe(409);
+  });
+
   it("rejects bad plans", async () => {
     await login();
     expect((await call("POST", "/api/matches", { plan: [] })).status).toBe(400);

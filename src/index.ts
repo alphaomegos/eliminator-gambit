@@ -2,7 +2,7 @@ import { changePin, gameSetStatus, login, logout } from "./auth";
 import { BUILTIN_DATASETS } from "./datasets";
 import { Env, HttpError, Router, errorResponse, json, now } from "./http";
 import { getImage, uploadImage } from "./images";
-import { createMatch, currentMatch, endMatch, eliminateItem, getMatch, nextRound } from "./matches";
+import { createMatch, currentMatch, endMatch, eliminateItem, getMatch, nextRound, undoElimination } from "./matches";
 import { createTemplate, deleteTemplate, getTemplate, listTemplates, updateTemplate } from "./templates";
 
 const router = new Router()
@@ -29,6 +29,7 @@ const router = new Router()
   .on("GET", "/api/matches/current", currentMatch)
   .on("GET", "/api/matches/:id", getMatch)
   .on("POST", "/api/matches/:id/eliminate", eliminateItem)
+  .on("POST", "/api/matches/:id/undo", undoElimination)
   .on("POST", "/api/matches/:id/next", nextRound)
   .on("POST", "/api/matches/:id/end", endMatch);
 

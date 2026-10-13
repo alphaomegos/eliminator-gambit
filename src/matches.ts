@@ -7,6 +7,7 @@ import {
   eliminate as applyElimination,
   pickRatedTarget,
   shuffle,
+  undoPoints,
   validateTemplateItems,
   type EliminationOutcome,
   type RoundKind,
@@ -128,6 +129,7 @@ interface ItemRow {
   image_id: string | null;
   eliminated: number;
   eliminated_by_team: TeamId | null;
+  elim_order: number | null;
 }
 
 async function loadMatch(env: Env, gameSet: string, matchId: string) {
@@ -143,16 +145,27 @@ async function loadMatch(env: Env, gameSet: string, matchId: string) {
   const round = r.results[0] as unknown as RoundRow | undefined;
   if (!round) throw new HttpError(500, "Match has no current round");
   const { results } = await env.DB.prepare(
-    "SELECT id, title, rating, secret_text, image_id, eliminated, eliminated_by_team FROM items WHERE round_id = ? ORDER BY position",
+    "SELECT id, title, rating, secret_text, image_id, eliminated, eliminated_by_team, elim_order FROM items WHERE round_id = ? ORDER BY position",
   )
     .bind(round.id)
     .all<ItemRow>();
   return { match, round, items: results };
 }
 
-function matchOut(match: MatchRow, round: RoundRow, items: ItemRow[], event?: EliminationOutcome & { item_id: string }) {
+type MatchEvent = (EliminationOutcome & { item_id: string }) | { kind: "undo"; item_id: string; team: TeamId; points: number };
+
+function lastElimination(items: ItemRow[]): ItemRow | null {
+  let last: ItemRow | null = null;
+  for (const it of items) {
+    if (it.eliminated && (last === null || (it.elim_order ?? 0) > (last.elim_order ?? 0))) last = it;
+  }
+  return last;
+}
+
+function matchOut(match: MatchRow, round: RoundRow, items: ItemRow[], event?: MatchEvent) {
   const plan = JSON.parse(match.plan) as string[];
   const finished = round.status === "finished";
+  const last = lastElimination(items);
   return {
     id: match.id,
     team1: match.team1,
@@ -163,8 +176,10 @@ function matchOut(match: MatchRow, round: RoundRow, items: ItemRow[], event?: El
     round_index: match.round_index,
     total_rounds: plan.length,
     has_next: finished && match.round_index < plan.length - 1,
+    last_elimination: last ? { item_id: last.id, title: last.title, team: last.eliminated_by_team } : null,
     round: {
       id: round.id,
+      source: plan[match.round_index],
       kind: round.kind,
       name: round.name,
       prompt: round.prompt,
@@ -273,9 +288,10 @@ export const eliminateItem: Handler = async ({ req, env, params }) => {
   // D1 batches run as one transaction; the version guard makes concurrent taps safe.
   const results = await env.DB.batch([
     env.DB.prepare(
-      `UPDATE items SET eliminated = 1, eliminated_by_team = ?, eliminated_at = ?
+      `UPDATE items SET eliminated = 1, eliminated_by_team = ?, eliminated_at = ?,
+         elim_order = (SELECT COALESCE(MAX(elim_order), 0) + 1 FROM items WHERE round_id = ?)
        WHERE id = ? AND round_id = ? AND eliminated = 0 AND ${versionGuard}`,
-    ).bind(outcome.team, t, itemId, round.id, round.id, v),
+    ).bind(outcome.team, t, round.id, itemId, round.id, round.id, v),
     env.DB.prepare(
       `UPDATE matches SET ${scoreCol} = ${scoreCol} + ?, status = ?, updated_at = ? WHERE id = ? AND ${versionGuard}`,
     ).bind(outcome.points, matchOver ? "finished" : "active", t, matchId, round.id, v),
@@ -295,6 +311,48 @@ export const eliminateItem: Handler = async ({ req, env, params }) => {
 
   const fresh = await loadMatch(env, gameSet, matchId);
   return json(matchOut(fresh.match, fresh.round, fresh.items, { ...outcome, item_id: itemId }));
+};
+
+/** Takes back the most recent elimination of the current round (host correction). */
+export const undoElimination: Handler = async ({ req, env, params }) => {
+  const gameSet = await requireGameSet(req, env);
+  const matchId = uuidParam(params.id, "match");
+  const { match, round, items } = await loadMatch(env, gameSet, matchId);
+
+  const last = lastElimination(items);
+  if (!last || !last.eliminated_by_team) throw new HttpError(409, "Nothing to undo in this round");
+  if (match.status !== "active") {
+    // A match that finished on its last move can be reopened, unless it was abandoned or replaced.
+    const newer = await env.DB.prepare("SELECT 1 FROM matches WHERE game_set = ? AND created_at > (SELECT created_at FROM matches WHERE id = ?) LIMIT 1")
+      .bind(gameSet, matchId)
+      .first();
+    if (round.status !== "finished" || newer) throw new HttpError(409, "This match is over");
+  }
+
+  const team = last.eliminated_by_team;
+  const points = undoPoints(last.id, round.target_item_id);
+  const scoreCol = team === 1 ? "score1" : "score2";
+  const t = now();
+  const v = round.version;
+  const versionGuard = "(SELECT version FROM rounds WHERE id = ?) = ?";
+
+  const results = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE items SET eliminated = 0, eliminated_by_team = NULL, eliminated_at = NULL, elim_order = NULL
+       WHERE id = ? AND round_id = ? AND eliminated = 1 AND ${versionGuard}`,
+    ).bind(last.id, round.id, round.id, v),
+    env.DB.prepare(
+      `UPDATE matches SET ${scoreCol} = ${scoreCol} - ?, status = 'active', updated_at = ? WHERE id = ? AND ${versionGuard}`,
+    ).bind(points, t, matchId, round.id, v),
+    env.DB.prepare(
+      `UPDATE rounds SET current_team = ?, status = 'active', winner_team = NULL, loser_team = NULL, version = version + 1
+       WHERE id = ? AND version = ?`,
+    ).bind(team, round.id, v),
+  ]);
+  if (!results[2].meta.changes) throw new HttpError(409, "The round changed meanwhile — refreshing");
+
+  const fresh = await loadMatch(env, gameSet, matchId);
+  return json(matchOut(fresh.match, fresh.round, fresh.items, { kind: "undo", item_id: last.id, team, points: -points }));
 };
 
 export const nextRound: Handler = async ({ req, env, params }) => {
