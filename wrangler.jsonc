@@ -13,13 +13,14 @@
     {
       "binding": "DB",
       "database_name": "eliminators-gambit",
-      // Replace with the id printed by `npx wrangler d1 create eliminators-gambit`.
       "database_id": "a5afd436-1b28-4e34-92bd-1323b6c8122c",
       "migrations_dir": "migrations"
     }
   ],
   "triggers": { "crons": ["17 3 * * *"] },
   "observability": { "enabled": true },
-  // Custom domain: uncomment once the eliminatorsgambit.com zone is on this Cloudflare account.
+  // Served only on the custom domain; the *.workers.dev URL stays off.
+  "workers_dev": false,
+  "preview_urls": false,
   "routes": [{ "pattern": "app.eliminatorsgambit.com", "custom_domain": true }]
 }

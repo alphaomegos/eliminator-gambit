@@ -47,22 +47,20 @@ npm run check          # typecheck + tests
 BASE_URL=http://localhost:8787 npm run e2e   # browser smoke test (needs Playwright's Chromium)
 ```
 
-## Deploying to Cloudflare
+## Deploying
 
-One-time setup:
+Production: https://app.eliminatorsgambit.com — Cloudflare Worker `eliminators-gambit` + D1 database
+`eliminators-gambit` (ids in `wrangler.jsonc`). Deploys are manual from a logged-in machine (`npx wrangler login`):
 
 ```bash
-npx wrangler login
-npx wrangler d1 create eliminators-gambit          # copy the printed database_id into wrangler.jsonc
-npm run deploy                                     # applies migrations remotely + deploys
+git am patches/<change>.patch   # if the change came as a patch (patches/ is git-ignored)
+npm ci
+npm run check                   # typecheck + tests
+npm run deploy                  # applies pending D1 migrations, then deploys the Worker
+git push origin main
 ```
 
-Custom domain: add `eliminatorsgambit.com` as a zone in the same Cloudflare account (or transfer the registration to
-Cloudflare Registrar), then uncomment the `routes` block in `wrangler.jsonc` and deploy again —
-`app.eliminatorsgambit.com` gets DNS and a certificate automatically.
-
-Continuous deployment: `.github/workflows/ci.yml` runs tests on every PR and deploys `main`. Add repository secrets
-`CLOUDFLARE_API_TOKEN` (template “Edit Cloudflare Workers” + D1 edit permission) and `CLOUDFLARE_ACCOUNT_ID`.
+CI (`.github/workflows/ci.yml`) only runs typecheck and tests on pushes and PRs; it does not deploy.
 
 ## API (all JSON, `Authorization: Bearer <token>` except auth and image GET)
 
