@@ -1,3 +1,5 @@
+import { t } from "./i18n.js";
+
 // HTTP client + session storage.
 
 const TOKEN_KEY = "eg.token";
@@ -58,7 +60,7 @@ export async function api(path, { method = "GET", body, raw, headers = {} } = {}
   try {
     res = await fetch(path, { method, headers: h, body: payload });
   } catch {
-    throw new ApiError(0, "Network error — check your connection.");
+    throw new ApiError(0, t("common.networkError"));
   }
 
   const isJson = (res.headers.get("content-type") || "").includes("application/json");

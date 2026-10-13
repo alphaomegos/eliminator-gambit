@@ -4,6 +4,7 @@ import { initEditor, showEditor } from "./editor.js";
 import { initGame, showGame } from "./game.js";
 import { initLogin, showLogin } from "./login.js";
 import { initSetup, showSetup } from "./setup.js";
+import { applyStatic, lang, onLangChange, setLang, t } from "./i18n.js";
 
 let resumable = null;
 
@@ -30,29 +31,36 @@ async function goMenu() {
     resumable = match;
     toggle($("menuResume"), !!match);
     if (match) {
-      $("menuResumeHint").textContent = `${match.team1} ${match.score1} : ${match.score2} ${match.team2} · round ${match.round_index + 1} of ${match.total_rounds}`;
+      renderResumeHint();
     }
   } catch {
     resumable = null;
   }
 }
 
+function renderResumeHint() {
+  const m = resumable;
+  $("menuResumeHint").textContent = m
+    ? t("menu.resumeHint", { team1: m.team1, team2: m.team2, score1: m.score1, score2: m.score2, round: m.round_index + 1, total: m.total_rounds })
+    : "";
+}
+
 async function changePin() {
-  const current = h("input", { class: "input", type: "password", placeholder: "Current PIN", autocomplete: "current-password" });
-  const next = h("input", { class: "input", type: "password", placeholder: "New PIN (min 4)", autocomplete: "new-password" });
+  const current = h("input", { class: "input", type: "password", placeholder: t("pin.current"), autocomplete: "current-password" });
+  const next = h("input", { class: "input", type: "password", placeholder: t("pin.new"), autocomplete: "new-password" });
   const ok = await showDialog({
-    title: `Change PIN for ${session.gameSet}`,
-    body: h("div", { class: "form" }, current, next, h("div", { class: "hint" }, "Other devices will be logged out.")),
+    title: t("pin.title", { name: session.gameSet }),
+    body: h("div", { class: "form" }, current, next, h("div", { class: "hint" }, t("pin.hint"))),
     actions: [
-      { label: "Cancel", value: false, variant: "secondary" },
-      { label: "Change", value: true },
+      { label: t("common.cancel"), value: false, variant: "secondary" },
+      { label: t("pin.change"), value: true },
     ],
   });
   if (!ok) return;
   try {
     const r = await post("/api/auth/pin", { current_pin: current.value, new_pin: next.value });
     session.set(r.token, session.gameSet);
-    await showDialog({ title: "PIN changed", text: "Use the new PIN next time you log in." });
+    await showDialog({ title: t("pin.doneTitle"), text: t("pin.done") });
   } catch (e) {
     await alertError(e);
   }
@@ -83,10 +91,13 @@ function wireMenu() {
 }
 
 function boot() {
+  applyStatic();
+  $("langSwitch").addEventListener("click", () => setLang(lang === "ru" ? "en" : "ru"));
+  onLangChange(renderResumeHint);
   initDialog();
   setUnauthorizedHandler(() => {
     goLogin();
-    alertError("Your session has expired. Please log in again.", "Logged out");
+    alertError(t("login.expired"), t("login.expiredTitle"));
   });
   initLogin({ onLoggedIn: goMenu });
   wireMenu();

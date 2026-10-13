@@ -1,3 +1,5 @@
+import { t, translateError } from "./i18n.js";
+
 // Small DOM helpers shared by all screens.
 
 export const $ = (id) => {
@@ -40,7 +42,7 @@ export function showScreen(name) {
 export const activeScreen = () => currentScreen;
 
 export function errorMessage(err) {
-  return String(err?.message ?? err ?? "Unknown error");
+  return translateError(String(err?.message ?? err ?? "Unknown error"));
 }
 
 // ---------- dialog ----------
@@ -51,7 +53,7 @@ let resolveDialog = null;
  * Opens the shared dialog. Resolves with the clicked action's value,
  * or `null` when dismissed (Esc / backdrop).
  */
-export function showDialog({ title = "", text = "", body = null, image = null, actions = [{ label: "OK", value: true }], wide = false }) {
+export function showDialog({ title = "", text = "", body = null, image = null, actions = [{ label: t("common.ok"), value: true }], wide = false }) {
   if (resolveDialog) resolveDialog(null);
   const modal = $("modal");
   $("modalTitle").textContent = title;
@@ -88,16 +90,16 @@ export function closeDialog(value = null) {
 
 export const isDialogOpen = () => !!resolveDialog;
 
-export function alertError(err, title = "Something went wrong") {
-  return showDialog({ title, text: errorMessage(err), actions: [{ label: "OK", value: true }] });
+export function alertError(err, title = t("common.error")) {
+  return showDialog({ title, text: errorMessage(err), actions: [{ label: t("common.ok"), value: true }] });
 }
 
-export async function confirmDialog(title, text, { ok = "OK", danger = false } = {}) {
+export async function confirmDialog(title, text, { ok = t("common.ok"), danger = false } = {}) {
   const v = await showDialog({
     title,
     text,
     actions: [
-      { label: "Cancel", value: false, variant: "secondary" },
+      { label: t("common.cancel"), value: false, variant: "secondary" },
       { label: ok, value: true, variant: danger ? "danger" : "" },
     ],
   });

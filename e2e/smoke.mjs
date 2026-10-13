@@ -179,13 +179,23 @@ await page.waitForFunction(() => document.querySelectorAll(".tplRow").length ===
 await page.click(".tplRow:has-text('Pick a colour') >> nth=0");
 await page.waitForFunction(() => document.querySelectorAll("#tplItems .thumb img").length === 3);
 
-step("wrong PIN is rejected");
+step("switch to Russian");
+await page.click("#langSwitch");
+await page.waitForFunction(() => document.querySelector("#screenEditor .itemsHeader .editorTitle").textContent === "Варианты");
+if ((await page.textContent("#editorSave")) !== "Сохранить") throw new Error("editor not translated");
+await shot("11-mobile-editor-ru");
 await page.click("#editorBack");
+await page.click("#menuNewGame");
+await page.waitForSelector(".roundPickRow:has-text('Встроенный')");
+await page.click("#setupBack");
+
+step("wrong PIN is rejected (in Russian)");
 await page.click("#menuLogout");
 await page.waitForSelector("#loginPinRow:not(.hidden)");
 await page.fill("#loginPin", "0000");
 await page.click("#loginSubmit");
-await page.waitForFunction(() => document.querySelector("#loginError").textContent.includes("Wrong PIN"));
+await page.waitForFunction(() => document.querySelector("#loginError").textContent.includes("Неверный PIN"));
+await shot("12-login-ru");
 
 await browser.close();
 const unexpected = errors.filter((e) => !/status of (400|401)|Wrong PIN/.test(e));

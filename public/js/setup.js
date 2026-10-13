@@ -1,5 +1,6 @@
 import { get, post, session } from "./api.js";
 import { $, errorMessage, h } from "./dom.js";
+import { onLangChange, t } from "./i18n.js";
 
 const MAX_ROUNDS = 10;
 let sources = []; // [{ id, name, meta }]
@@ -28,7 +29,7 @@ const planKey = () => `eg.plan.${session.gameSet}`;
 function renderPickList() {
   const box = $("roundPickList");
   if (!sources.length) {
-    box.replaceChildren(h("div", { class: "hint" }, "No rounds yet — create some in the editor."));
+    box.replaceChildren(h("div", { class: "hint" }, t("setup.noRounds")));
     return;
   }
   box.replaceChildren(
@@ -45,7 +46,7 @@ function renderPickList() {
             if (e.target.checked) {
               if (plan.length >= MAX_ROUNDS) {
                 e.target.checked = false;
-                $("setupError").textContent = `Up to ${MAX_ROUNDS} rounds per match.`;
+                $("setupError").textContent = t("setup.max", { n: MAX_ROUNDS });
                 return;
               }
               plan.push(src.id);
@@ -57,14 +58,18 @@ function renderPickList() {
             renderPickList();
           },
         }),
-        h("span", { class: "roundPickName" }, src.name, h("span", { class: "mutedSmall" }, src.meta)),
+        h("span", { class: "roundPickName" }, sourceName(src), h("span", { class: "mutedSmall" }, ` · ${t(`kind.${src.kind}`)} · ${t("items.count", { n: src.count })}`)),
         h("span", { class: `roundPickOrder${picked ? " active" : ""}` }, picked ? String(idx + 1) : ""),
       );
     }),
   );
 }
 
+/** Built-in sources get a localized name; user rounds keep theirs. */
+const sourceName = (src) => (src.id.startsWith("builtin:") ? t(`${src.id}.name`) : src.name);
+
 export function initSetup({ onBack, onMatchStarted }) {
+  onLangChange(() => sources.length && renderPickList());
   onStarted = onMatchStarted;
   $("setupBack").addEventListener("click", onBack);
   $("setupClear").addEventListener("click", () => {
@@ -77,11 +82,11 @@ export function initSetup({ onBack, onMatchStarted }) {
     const btn = $("setupStart");
     $("setupError").textContent = "";
     if (!plan.length) {
-      $("setupError").textContent = "Pick at least one round.";
+      $("setupError").textContent = t("setup.pickOne");
       return;
     }
-    const team1 = $("team1Input").value.trim() || "Team 1";
-    const team2 = $("team2Input").value.trim() || "Team 2";
+    const team1 = $("team1Input").value.trim() || t("setup.team1Default");
+    const team2 = $("team2Input").value.trim() || t("setup.team2Default");
     store.set("eg.teams", [team1, team2]);
     btn.disabled = true;
     try {
@@ -100,13 +105,13 @@ export async function showSetup() {
   $("team1Input").value = t1;
   $("team2Input").value = t2;
   $("setupError").textContent = "";
-  $("roundPickList").replaceChildren(h("div", { class: "hint" }, "Loading rounds…"));
+  $("roundPickList").replaceChildren(h("div", { class: "hint" }, t("setup.loading")));
 
   try {
     const [{ builtins }, { templates }] = await Promise.all([get("/api/builtins"), get("/api/templates")]);
     sources = [
-      ...templates.map((t) => ({ id: `template:${t.id}`, name: t.name, meta: ` · ${t.kind} · ${t.item_count} items` })),
-      ...builtins.map((b) => ({ id: b.id, name: b.name, meta: " · rated · 11 items" })),
+      ...templates.map((tpl) => ({ id: `template:${tpl.id}`, name: tpl.name, kind: tpl.kind, count: tpl.item_count })),
+      ...builtins.map((b) => ({ id: b.id, name: b.name, kind: "rated", count: 11 })),
     ];
   } catch (err) {
     sources = [];

@@ -1,6 +1,7 @@
 import { del, get, post, put } from "./api.js";
 import { $, alertError, confirmDialog, errorMessage, h, showDialog } from "./dom.js";
 import { uploadDataUrl, uploadImage, urlToDataUrl } from "./images.js";
+import { onLangChange, t } from "./i18n.js";
 
 const MAX_ITEMS = 11;
 const EXPORT_FORMAT = "eliminators-gambit/v1";
@@ -28,12 +29,12 @@ function setStatus(text, kind = "") {
 
 function markDirty() {
   dirty = true;
-  setStatus("Unsaved changes", "muted");
+  setStatus(t("editor.unsaved"), "muted");
 }
 
 async function confirmDiscard() {
   if (!dirty) return true;
-  return confirmDialog("Discard changes?", "This round has unsaved changes.", { ok: "Discard", danger: true });
+  return confirmDialog(t("editor.discardTitle"), t("editor.discardText"), { ok: t("editor.discard"), danger: true });
 }
 
 // ---------- image picker ----------
@@ -47,14 +48,14 @@ function imagePicker({ get: getImg, set: setImg, compact = false }) {
     // Note: native replaceChildren() would stringify nulls, so filter them out.
     const parts = [
       h("div", { class: "thumb", onclick: () => file.click() }, img ? h("img", { src: img.url, alt: "" }) : h("span", {}, "+")),
-      h("button", { class: "btn small secondary", type: "button", onclick: () => file.click() }, img ? "Replace" : "Image"),
+      h("button", { class: "btn small secondary", type: "button", onclick: () => file.click() }, t(img ? "editor.replace" : "editor.image")),
       img
         ? h(
             "button",
             {
               class: "btn small secondary iconBtn",
               type: "button",
-              title: "Remove image",
+              title: t("editor.removeImage"),
               onclick: () => {
                 setImg(null);
                 markDirty();
@@ -95,11 +96,7 @@ function imagePicker({ get: getImg, set: setImg, compact = false }) {
 function renderItems() {
   const { kind } = model;
   $("itemsHint").textContent =
-    kind === "rated"
-      ? "Title + rating. Lowest rating is the target. Image optional."
-      : kind === "carousel"
-        ? "Title + hidden info + image (required). Pick the target with ◉."
-        : "Title + hidden info. Pick the target with ◉. Image optional.";
+    kind === "rated" ? t("editor.hintRated") : kind === "carousel" ? t("editor.hintCarousel") : t("editor.hintManual");
 
   $("tplItems").replaceChildren(
     ...model.items.map((it, idx) => {
@@ -117,15 +114,15 @@ function renderItems() {
         "div",
         { class: `tplItemRow kind-${kind}` },
         h("span", { class: "rowNum" }, String(idx + 1)),
-        field("title", { placeholder: `Item ${idx + 1}`, maxlength: "200", "aria-label": `Item ${idx + 1} title` }),
+        field("title", { placeholder: t("editor.item", { n: idx + 1 }), maxlength: "200", "aria-label": t("editor.itemTitle", { n: idx + 1 }) }),
         kind === "rated"
-          ? field("rating", { placeholder: "Rating", inputmode: "decimal", "aria-label": `Item ${idx + 1} rating` })
-          : field("secret_text", { placeholder: "Hidden info", maxlength: "500", "aria-label": `Item ${idx + 1} hidden info` }),
+          ? field("rating", { placeholder: t("editor.rating"), inputmode: "decimal", "aria-label": t("editor.itemRating", { n: idx + 1 }) })
+          : field("secret_text", { placeholder: t("editor.secret"), maxlength: "500", "aria-label": t("editor.itemSecret", { n: idx + 1 }) }),
         kind === "rated"
           ? null
           : h(
               "label",
-              { class: "targetPick", title: "Target (the one to avoid)" },
+              { class: "targetPick", title: t("editor.target") },
               h("input", {
                 type: "radio",
                 name: "targetPick",
@@ -155,20 +152,20 @@ function renderForm() {
 function renderList() {
   const box = $("templatesList");
   if (!templates.length) {
-    box.replaceChildren(h("div", { class: "hint" }, "No rounds yet. Fill in the form and press Save."));
+    box.replaceChildren(h("div", { class: "hint" }, t("editor.empty")));
     return;
   }
   box.replaceChildren(
-    ...templates.map((t) =>
+    ...templates.map((tpl) =>
       h(
         "button",
         {
           type: "button",
-          class: `tplRow${model?.id === t.id ? " active" : ""}`,
-          onclick: () => selectTemplate(t.id),
+          class: `tplRow${model?.id === tpl.id ? " active" : ""}`,
+          onclick: () => selectTemplate(tpl.id),
         },
-        h("div", { class: "tplRowName" }, t.name),
-        h("div", { class: "tplRowMeta" }, `${t.kind} · ${t.item_count} items`),
+        h("div", { class: "tplRowName" }, tpl.name),
+        h("div", { class: "tplRowMeta" }, `${t(`kind.${tpl.kind}`)} · ${t("items.count", { n: tpl.item_count })}`),
       ),
     ),
   );
@@ -250,7 +247,7 @@ async function save() {
     dirty = false;
     renderForm();
     await loadList();
-    setStatus("Saved ✓", "ok");
+    setStatus(t("editor.saved"), "ok");
   } catch (e) {
     setStatus(errorMessage(e), "error");
   } finally {
@@ -260,12 +257,12 @@ async function save() {
 
 async function remove() {
   if (!model?.id) return;
-  if (!(await confirmDialog("Delete round?", `“${model.name}” will be deleted permanently.`, { ok: "Delete", danger: true }))) return;
+  if (!(await confirmDialog(t("editor.deleteTitle"), t("editor.deleteText", { name: model.name }), { ok: t("editor.delete"), danger: true }))) return;
   try {
     await del(`/api/templates/${model.id}`);
     await loadList();
     newTemplate();
-    setStatus("Deleted", "muted");
+    setStatus(t("editor.deleted"), "muted");
   } catch (e) {
     await alertError(e);
   }
@@ -273,7 +270,7 @@ async function remove() {
 
 function duplicate() {
   if (!model?.id) return;
-  model = { ...structuredClone(model), id: null, name: `${model.name} (copy)` };
+  model = { ...structuredClone(model), id: null, name: t("editor.copy", { name: model.name }) };
   renderForm();
   renderList();
   markDirty();
@@ -284,7 +281,7 @@ function duplicate() {
 async function exportAll() {
   const btn = $("editorExport");
   btn.disabled = true;
-  setStatus("Preparing export…", "muted");
+  setStatus(t("editor.exporting"), "muted");
   try {
     const cache = new Map();
     const inline = async (url) => {
@@ -293,8 +290,8 @@ async function exportAll() {
       return cache.get(url);
     };
     const out = [];
-    for (const t of templates) {
-      const tpl = await get(`/api/templates/${t.id}`);
+    for (const summary of templates) {
+      const tpl = await get(`/api/templates/${summary.id}`);
       out.push({
         kind: tpl.kind,
         name: tpl.name,
@@ -319,7 +316,7 @@ async function exportAll() {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    setStatus(`Exported ${out.length} rounds`, "ok");
+    setStatus(t("editor.exported", { n: out.length }), "ok");
   } catch (e) {
     setStatus(errorMessage(e), "error");
   } finally {
@@ -332,25 +329,25 @@ async function importFile(file) {
   try {
     data = JSON.parse(await file.text());
   } catch {
-    return alertError("That file is not valid JSON.");
+    return alertError(t("editor.badJson"));
   }
   const list = Array.isArray(data?.templates) ? data.templates : null;
-  if (data?.format !== EXPORT_FORMAT || !list) return alertError("This is not an Eliminator’s Gambit export file.");
-  if (!(await confirmDialog("Import rounds?", `${list.length} rounds will be added to this game set.`, { ok: "Import" }))) return;
+  if (data?.format !== EXPORT_FORMAT || !list) return alertError(t("editor.badFile"));
+  if (!(await confirmDialog(t("editor.importTitle"), t("editor.importText", { n: list.length }), { ok: t("editor.import") }))) return;
 
   let ok = 0;
   const failed = [];
-  for (const [i, t] of list.entries()) {
-    setStatus(`Importing ${i + 1} / ${list.length}…`, "muted");
+  for (const [i, item] of list.entries()) {
+    setStatus(t("editor.importing", { i: i + 1, n: list.length }), "muted");
     try {
       const img = async (d) => (d ? (await uploadDataUrl(d)).id : null);
       await post("/api/templates", {
-        kind: t.kind,
-        name: t.name,
-        prompt: t.prompt,
-        image_id: await img(t.image),
+        kind: item.kind,
+        name: item.name,
+        prompt: item.prompt,
+        image_id: await img(item.image),
         items: await Promise.all(
-          (t.items || []).map(async (it) => ({
+          (item.items || []).map(async (it) => ({
             title: it.title,
             rating: it.rating,
             secret_text: it.secret_text,
@@ -361,17 +358,23 @@ async function importFile(file) {
       });
       ok++;
     } catch (e) {
-      failed.push(`${t?.name || `#${i + 1}`}: ${errorMessage(e)}`);
+      failed.push(`${item?.name || `#${i + 1}`}: ${errorMessage(e)}`);
     }
   }
   await loadList();
-  setStatus(`Imported ${ok} of ${list.length}`, failed.length ? "error" : "ok");
-  if (failed.length) await showDialog({ title: "Some rounds were skipped", text: failed.join("\n") });
+  setStatus(t("editor.imported", { ok, n: list.length }), failed.length ? "error" : "ok");
+  if (failed.length) await showDialog({ title: t("editor.skipped"), text: failed.join("\n") });
 }
 
 // ---------- public ----------
 
 export function initEditor({ onBack }) {
+  onLangChange(() => {
+    if (!model) return;
+    renderForm();
+    renderList();
+    if (dirty) setStatus(t("editor.unsaved"), "muted");
+  });
   onBackCb = onBack;
   $("tplKind").addEventListener("change", (e) => {
     model.kind = e.target.value;

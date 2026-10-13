@@ -1,5 +1,6 @@
 import { get, post, session } from "./api.js";
 import { $, errorMessage, toggle } from "./dom.js";
+import { onLangChange, t } from "./i18n.js";
 
 const NAME_RE = /^[A-Z0-9_-]{4,16}$/;
 
@@ -16,14 +17,12 @@ function render() {
   const ready = status && status.name === name;
   toggle($("loginPinRow"), !!ready);
   if (ready) {
-    $("loginPinLabel").textContent = !status.exists ? "Choose a PIN" : status.has_pin ? "PIN" : "Set a PIN";
-    $("loginHint").textContent = !status.exists
-      ? "New game set. Share the name and PIN with whoever hosts your games."
-      : status.has_pin
-        ? ""
-        : "This game set has no PIN yet — the one you enter now will protect it.";
+    $("loginPinLabel").textContent = t(!status.exists ? "login.choosePin" : status.has_pin ? "login.pin" : "login.setPin");
+    $("loginHint").textContent = !status.exists ? t("login.newHint") : status.has_pin ? "" : t("login.legacyHint");
     $("loginPin").autocomplete = status.exists ? "current-password" : "new-password";
-    $("loginSubmit").textContent = status.exists ? "Log in" : "Create game set";
+    $("loginSubmit").textContent = t(status.exists ? "login.login" : "login.create");
+  } else {
+    $("loginSubmit").textContent = t("login.continue");
   }
   $("loginSubmit").disabled = !ready || $("loginPin").value.length < 4;
 }
@@ -57,6 +56,7 @@ export function initLogin({ onLoggedIn }) {
     debounce = setTimeout(checkName, 250);
   });
   $("loginPin").addEventListener("input", render);
+  onLangChange(render);
 
   $("loginForm").addEventListener("submit", async (e) => {
     e.preventDefault();

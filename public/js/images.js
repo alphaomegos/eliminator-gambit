@@ -1,5 +1,6 @@
 // Client-side image compression + upload.
 import { api } from "./api.js";
+import { t } from "./i18n.js";
 
 const MAX_INPUT_BYTES = 15 * 1024 * 1024;
 
@@ -7,14 +8,14 @@ function loadImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("Could not read that image."));
+    img.onerror = () => reject(new Error(t("img.unreadable")));
     img.src = src;
   });
 }
 
 /** Downscale to `maxSide` and re-encode as JPEG (WebP if smaller). */
 export async function compressImage(blob, { maxSide = 1600, quality = 0.82 } = {}) {
-  if (blob.size > MAX_INPUT_BYTES) throw new Error("Image is too large (max 15 MB).");
+  if (blob.size > MAX_INPUT_BYTES) throw new Error(t("img.tooLarge"));
   const url = URL.createObjectURL(blob);
   try {
     const img = await loadImage(url);
@@ -31,7 +32,7 @@ export async function compressImage(blob, { maxSide = 1600, quality = 0.82 } = {
     const encode = (type) => new Promise((res) => canvas.toBlob(res, type, quality));
     const [jpeg, webp] = await Promise.all([encode("image/jpeg"), encode("image/webp")]);
     const best = webp && webp.type === "image/webp" && webp.size < jpeg.size ? webp : jpeg;
-    if (!best) throw new Error("Could not encode image.");
+    if (!best) throw new Error(t("img.encode"));
     return best;
   } finally {
     URL.revokeObjectURL(url);

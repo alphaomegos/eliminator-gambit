@@ -15,24 +15,27 @@
       <header class="header" id="appHeader">
         <div class="brand">
           <div class="title">The Eliminator’s Gambit</div>
-          <div class="subtitle">Eliminate carefully. One wrong tap ends the round.</div>
+          <div class="subtitle" data-i18n="app.subtitle">Eliminate carefully. One wrong tap ends the round.</div>
         </div>
-        <div class="headerMeta" id="headerMeta"></div>
+        <div class="headerMeta">
+          <span id="headerMeta"></span>
+          <button id="langSwitch" class="btn small secondary" type="button" data-i18n="lang.switch" data-i18n-title="lang.switchTitle">RU</button>
+        </div>
       </header>
 
       <main class="main">
         <!-- BOOT -->
         <section id="screenBoot" class="screen">
-          <div class="card centerText mutedSmall">Loading…</div>
+          <div class="card centerText mutedSmall" data-i18n="common.loading">Loading…</div>
         </section>
 
         <!-- LOGIN -->
         <section id="screenLogin" class="screen hidden">
           <form class="card form narrow" id="loginForm" autocomplete="off">
             <div class="formRow">
-              <label class="label" for="loginName">Game set name</label>
-              <input id="loginName" class="input upper" maxlength="16" placeholder="e.g. EDUARD" autocapitalize="characters" spellcheck="false" />
-              <div class="hint">4–16 letters or digits. Everyone at your party uses the same name.</div>
+              <label class="label" for="loginName" data-i18n="login.name">Game set name</label>
+              <input id="loginName" class="input upper" maxlength="16" placeholder="e.g. EDUARD" data-i18n-placeholder="login.namePlaceholder" autocapitalize="characters" spellcheck="false" />
+              <div class="hint" data-i18n="login.nameHint">4–16 letters or digits. Everyone at your party uses the same name.</div>
             </div>
             <div class="formRow hidden" id="loginPinRow">
               <label class="label" for="loginPin" id="loginPinLabel">PIN</label>
@@ -40,7 +43,7 @@
               <div class="hint" id="loginHint"></div>
             </div>
             <div class="formActions">
-              <button id="loginSubmit" class="btn" type="submit" disabled>Continue</button>
+              <button id="loginSubmit" class="btn" type="submit" disabled data-i18n="login.continue">Continue</button>
             </div>
             <div class="status error" id="loginError" role="alert"></div>
           </form>
@@ -50,21 +53,22 @@
         <section id="screenMenu" class="screen hidden">
           <div class="card">
             <div class="menuGrid">
-              <button id="menuResume" class="btn big success hidden" type="button">Continue match</button>
-              <button id="menuNewGame" class="btn big" type="button">New game</button>
-              <button id="menuEditor" class="btn big secondary" type="button">Edit rounds</button>
-              <button id="menuPin" class="btn big secondary" type="button">Change PIN</button>
-              <button id="menuLogout" class="btn big secondary" type="button">Log out</button>
+              <button id="menuResume" class="btn big success hidden" type="button" data-i18n="menu.resume">Continue match</button>
+              <button id="menuNewGame" class="btn big" type="button" data-i18n="menu.newGame">New game</button>
+              <button id="menuEditor" class="btn big secondary" type="button" data-i18n="menu.editor">Edit rounds</button>
+              <button id="menuPin" class="btn big secondary" type="button" data-i18n="menu.pin">Change PIN</button>
+              <button id="menuLogout" class="btn big secondary" type="button" data-i18n="menu.logout">Log out</button>
             </div>
             <div class="hint centerText" id="menuResumeHint"></div>
           </div>
           <details class="card rules">
-            <summary>How to play</summary>
+            <summary data-i18n="menu.rules">How to play</summary>
             <ol>
-              <li>Two teams take turns eliminating one option at a time.</li>
-              <li>Somewhere in the list hides the target — the worst / lowest / odd one out.</li>
-              <li>Each safe elimination gives your team <b>+1</b>. Eliminating the target costs <b>−4</b> and ends the round.</li>
-              <li>If only the target is left, nobody hit it and the round is a tie.</li>
+              <li data-i18n="menu.rule1">Two teams take turns eliminating one option at a time.</li>
+              <li data-i18n="menu.rule2">Somewhere in the list hides the target — the worst / lowest / odd one out.</li>
+              <li data-i18n="menu.rule3">Each safe elimination gives your team +1. Eliminating the target costs −4 and ends the round.</li>
+              <li data-i18n="menu.rule4">If only the target is left, nobody hit it and the round is a tie.</li>
+              <li data-i18n="menu.rule5">Host tapped the wrong one? “↶ Undo” takes the last move back.</li>
             </ol>
           </details>
         </section>
@@ -74,24 +78,24 @@
           <form class="card form" id="setupForm">
             <div class="teamInputs">
               <div class="formRow">
-                <label class="label" for="team1Input">First team</label>
-                <input id="team1Input" class="input" maxlength="40" placeholder="Team 1" />
+                <label class="label" for="team1Input" data-i18n="setup.team1">First team</label>
+                <input id="team1Input" class="input" maxlength="40" placeholder="Team 1" data-i18n-placeholder="setup.team1Default" />
               </div>
               <div class="formRow">
-                <label class="label" for="team2Input">Second team</label>
-                <input id="team2Input" class="input" maxlength="40" placeholder="Team 2" />
+                <label class="label" for="team2Input" data-i18n="setup.team2">Second team</label>
+                <input id="team2Input" class="input" maxlength="40" placeholder="Team 2" data-i18n-placeholder="setup.team2Default" />
               </div>
             </div>
             <div class="formRow">
               <div class="rowBetween">
-                <span class="label">Pick 1–10 rounds. Click order is play order.</span>
-                <button id="setupClear" class="btn small secondary" type="button">Clear</button>
+                <span class="label" data-i18n="setup.pick">Pick 1–10 rounds. Click order is play order.</span>
+                <button id="setupClear" class="btn small secondary" type="button" data-i18n="setup.clear">Clear</button>
               </div>
               <div id="roundPickList" class="roundPickList"></div>
             </div>
             <div class="formActions">
-              <button id="setupStart" class="btn success" type="submit">Start</button>
-              <button id="setupBack" class="btn secondary" type="button">Back</button>
+              <button id="setupStart" class="btn success" type="submit" data-i18n="setup.start">Start</button>
+              <button id="setupBack" class="btn secondary" type="button" data-i18n="common.back">Back</button>
             </div>
             <div class="status error" id="setupError" role="alert"></div>
           </form>
@@ -107,16 +111,16 @@
             <div class="card gameHeaderCard">
               <div class="roundImageFrame hidden" id="roundImageFrame"><img id="roundImage" alt="" /></div>
               <div class="gameCorner left">
-                <button id="gameNext" class="btn success small hidden" type="button">Next round →</button>
-                <button id="gameUndo" class="btn small glass hidden" type="button" title="Undo the last move (Ctrl+Z)">↶ Undo</button>
+                <button id="gameNext" class="btn success small hidden" type="button" data-i18n="game.next">Next round →</button>
+                <button id="gameUndo" class="btn small glass hidden" type="button" data-i18n-title="game.undoTitle" data-i18n="game.undo">↶ Undo</button>
               </div>
               <div class="gameCorner right">
-                <button id="gameMenu" class="btn small glass" type="button">Menu</button>
+                <button id="gameMenu" class="btn small glass" type="button" data-i18n="game.menu">Menu</button>
               </div>
               <div class="pill" id="roundCounter"></div>
               <div class="pill prompt" id="prompt"></div>
               <div class="pill roundStatus hidden" id="roundStatus" role="status"></div>
-              <button id="showAllBtn" class="btn small glass showAllBtn hidden" type="button">Show everything</button>
+              <button id="showAllBtn" class="btn small glass showAllBtn hidden" type="button" data-i18n="game.showAll">Show everything</button>
             </div>
             <div class="sideTeam" id="team2Box">
               <div class="teamName" id="team2Name">Team 2</div>
@@ -125,11 +129,11 @@
 
             <div class="roundMedia hidden" id="roundMedia">
               <div class="carouselFrame" id="carouselFrame">
-                <button id="carouselPrev" class="carouselBtn prev" type="button" aria-label="Previous"></button>
+                <button id="carouselPrev" class="carouselBtn prev" type="button" aria-label="Previous" data-i18n-aria-label="game.prev"></button>
                 <div class="carouselViewport" id="carouselViewport">
                   <div class="carouselTrack" id="carouselTrack"></div>
                 </div>
-                <button id="carouselNext" class="carouselBtn next" type="button" aria-label="Next"></button>
+                <button id="carouselNext" class="carouselBtn next" type="button" aria-label="Next" data-i18n-aria-label="game.nextCard"></button>
               </div>
             </div>
             <ol class="answersGrid" id="itemsList"></ol>
@@ -137,7 +141,7 @@
 
           <div id="showAllOverlay" class="showAllOverlay hidden">
             <div class="showAllGrid" id="showAllGrid"></div>
-            <button id="showAllClose" class="btn glass showAllClose" type="button">Close</button>
+            <button id="showAllClose" class="btn glass showAllClose" type="button" data-i18n="common.close">Close</button>
           </div>
         </section>
 
@@ -146,50 +150,50 @@
           <div class="editor">
             <aside class="card editorList">
               <div class="rowBetween">
-                <div class="editorTitle">Rounds</div>
-                <button id="editorAdd" class="btn small" type="button">+ New</button>
+                <div class="editorTitle" data-i18n="editor.rounds">Rounds</div>
+                <button id="editorAdd" class="btn small" type="button" data-i18n="editor.new">+ New</button>
               </div>
               <div id="templatesList" class="templatesList"></div>
               <div class="editorFooter">
-                <button id="editorExport" class="btn small secondary" type="button">Export</button>
-                <button id="editorImport" class="btn small secondary" type="button">Import</button>
+                <button id="editorExport" class="btn small secondary" type="button" data-i18n="editor.export">Export</button>
+                <button id="editorImport" class="btn small secondary" type="button" data-i18n="editor.import">Import</button>
                 <input id="editorImportFile" type="file" accept="application/json,.json" class="hidden" />
-                <button id="editorBack" class="btn small secondary" type="button">Back</button>
+                <button id="editorBack" class="btn small secondary" type="button" data-i18n="common.back">Back</button>
               </div>
             </aside>
 
             <form class="card editorMain form" id="editorForm" autocomplete="off">
               <div class="formRow">
-                <label class="label" for="tplKind">Round type</label>
+                <label class="label" for="tplKind" data-i18n="editor.type">Round type</label>
                 <select id="tplKind" class="select">
-                  <option value="rated">Rated — lowest rating is the target</option>
-                  <option value="manual">Manual — host marks the target</option>
-                  <option value="carousel">Carousel — picture cards, host marks the target</option>
+                  <option value="rated" data-i18n="editor.typeRated">Rated — lowest rating is the target</option>
+                  <option value="manual" data-i18n="editor.typeManual">Manual — host marks the target</option>
+                  <option value="carousel" data-i18n="editor.typeCarousel">Carousel — picture cards, host marks the target</option>
                 </select>
               </div>
               <div class="formRow">
-                <label class="label" for="tplName">Round name</label>
-                <input id="tplName" class="input" maxlength="120" placeholder="e.g. Movies — worst rated" />
+                <label class="label" for="tplName" data-i18n="editor.name">Round name</label>
+                <input id="tplName" class="input" maxlength="120" placeholder="e.g. Movies — worst rated" data-i18n-placeholder="editor.namePlaceholder" />
               </div>
               <div class="formRow">
-                <label class="label" for="tplPrompt">Prompt shown to players</label>
-                <input id="tplPrompt" class="input" maxlength="300" placeholder="e.g. Find the lowest-rated movie." />
+                <label class="label" for="tplPrompt" data-i18n="editor.prompt">Prompt shown to players</label>
+                <input id="tplPrompt" class="input" maxlength="300" placeholder="e.g. Find the lowest-rated movie." data-i18n-placeholder="editor.promptPlaceholder" />
               </div>
               <div class="formRow">
-                <span class="label">Background image (optional)</span>
+                <span class="label" data-i18n="editor.bgImage">Background image (optional)</span>
                 <div class="imagePicker" id="tplImagePicker"></div>
               </div>
 
               <div class="rowBetween itemsHeader">
-                <div class="editorTitle">Items</div>
+                <div class="editorTitle" data-i18n="editor.items">Items</div>
                 <div class="mutedSmall" id="itemsHint"></div>
               </div>
               <div id="tplItems" class="tplItems"></div>
 
               <div class="formActions sticky">
-                <button id="editorSave" class="btn success" type="submit">Save</button>
-                <button id="editorDuplicate" class="btn secondary" type="button">Duplicate</button>
-                <button id="editorDelete" class="btn danger" type="button">Delete</button>
+                <button id="editorSave" class="btn success" type="submit" data-i18n="editor.save">Save</button>
+                <button id="editorDuplicate" class="btn secondary" type="button" data-i18n="editor.duplicate">Duplicate</button>
+                <button id="editorDelete" class="btn danger" type="button" data-i18n="editor.delete">Delete</button>
                 <span class="status" id="editorStatus" role="status"></span>
               </div>
             </form>

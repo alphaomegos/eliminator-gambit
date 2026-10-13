@@ -1,23 +1,29 @@
 import { ApiError, get, post } from "./api.js";
 import { $, activeScreen, alertError, confirmDialog, h, isDialogOpen, showDialog, toggle } from "./dom.js";
+import { onLangChange, t } from "./i18n.js";
 
 let match = null;
 let carouselIndex = 0;
 let pending = false;
 let onExit = () => {};
 
-const teamName = (t) => (t === 1 ? match.team1 : t === 2 ? match.team2 : "");
+const teamName = (team) => (team === 1 ? match.team1 : team === 2 ? match.team2 : "");
 
 function revealText(item) {
   if (item.secret_text) return item.secret_text;
-  if (item.rating != null) return `Rating: ${item.rating}`;
+  if (item.rating != null) return t("game.rating", { value: item.rating });
   return "";
 }
 
 function roundStatusText(round) {
   if (round.status !== "finished") return "";
-  if (round.winner_team) return `${teamName(round.loser_team)} hit the target — ${teamName(round.winner_team)} wins the round`;
-  return "Only the target is left — nobody fell for it. Tie!";
+  if (round.winner_team) return t("game.hit", { loser: teamName(round.loser_team), winner: teamName(round.winner_team) });
+  return t("game.tie");
+}
+
+/** Built-in rounds are stored in English; show them in the UI language. */
+function roundText(round, field) {
+  return round.source?.startsWith("builtin:") ? t(`${round.source}.${field}`) : round[field];
 }
 
 // ---------- rendering ----------
@@ -32,8 +38,8 @@ function renderHeader() {
   $("team1Box").classList.toggle("active", !finished && round.current_team === 1);
   $("team2Box").classList.toggle("active", !finished && round.current_team === 2);
 
-  $("roundCounter").textContent = `Round ${match.round_index + 1} of ${match.total_rounds} · ${round.name}`;
-  $("prompt").textContent = round.prompt;
+  $("roundCounter").textContent = t("game.counter", { round: match.round_index + 1, total: match.total_rounds, name: roundText(round, "name") });
+  $("prompt").textContent = roundText(round, "prompt");
   const status = $("roundStatus");
   status.textContent = roundStatusText(round);
   status.classList.toggle("win", !!round.winner_team);
@@ -86,13 +92,13 @@ function renderList() {
                 {
                   class: "btn small glass",
                   type: "button",
-                  title: "Show image",
+                  title: t("game.imageTitle"),
                   onclick: (e) => {
                     e.stopPropagation();
                     reveal(item);
                   },
                 },
-                "Image",
+                t("game.image"),
               )
             : null,
         ),
@@ -171,7 +177,7 @@ function reveal(item) {
     title: item.title,
     text: revealText(item),
     image: item.image_url,
-    actions: [{ label: "Close", value: true, variant: "success" }],
+    actions: [{ label: t("common.close"), value: true, variant: "success" }],
   });
 }
 
@@ -208,9 +214,9 @@ async function undo() {
   if (pending || !canUndo()) return;
   const last = match.last_elimination;
   const ok = await confirmDialog(
-    "Undo last move?",
-    `“${last.title}” comes back into play, ${teamName(last.team)} gets the turn back and the points for that move are taken back.`,
-    { ok: "Undo" },
+    t("game.undoConfirmTitle"),
+    t("game.undoConfirm", { title: last.title, team: teamName(last.team) }),
+    { ok: t("game.undoOk") },
   );
   if (!ok) return;
   pending = true;
@@ -252,7 +258,7 @@ async function refresh() {
 
 async function showFinal() {
   const { score1, score2, team1, team2 } = match;
-  const title = score1 === score2 ? "It’s a draw!" : `${score1 > score2 ? team1 : team2} wins the match!`;
+  const title = score1 === score2 ? t("game.draw") : t("game.winsMatch", { team: score1 > score2 ? team1 : team2 });
   const body = h(
     "div",
     { class: "finalScores" },
@@ -263,8 +269,8 @@ async function showFinal() {
     title,
     body,
     actions: [
-      { label: "Stay here", value: "stay", variant: "secondary" },
-      { label: "Back to menu", value: "menu", variant: "success" },
+      { label: t("game.stay"), value: "stay", variant: "secondary" },
+      { label: t("game.toMenu"), value: "menu", variant: "success" },
     ],
   });
   if (choice === "menu") onExit();
@@ -299,6 +305,7 @@ export function initGame({ onMenu }) {
   $("gameMenu").addEventListener("click", onMenu);
   $("gameNext").addEventListener("click", nextRound);
   $("gameUndo").addEventListener("click", undo);
+  onLangChange(() => match && render());
   $("showAllBtn").addEventListener("click", openShowAll);
   $("showAllClose").addEventListener("click", closeShowAll);
   $("carouselPrev").addEventListener("click", () => moveCarousel(-1));

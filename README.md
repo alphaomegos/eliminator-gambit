@@ -16,6 +16,7 @@ is left, nobody fell for it and the round is a tie. A match is 1–10 rounds; th
 
 Rounds are authored in the built-in editor and stored per **game set** — a private space protected by a PIN.
 Rounds can be exported to / imported from a JSON file (images included).
+The interface is available in English and Russian (auto-detected from the browser, switch in the header).
 
 ## Stack
 
@@ -33,7 +34,7 @@ src/
   templates.ts  round editor CRUD
   matches.ts    match flow, server-side scoring
   images.ts     image upload/serving (content-addressed)
-public/         index.html, styles.css, js/*.js
+public/         index.html, styles.css, js/*.js (js/i18n.js holds all UI strings, EN + RU)
 test/           Vitest tests that run inside the Workers runtime
 e2e/smoke.mjs   Playwright smoke test against a running server
 ```
