@@ -62,6 +62,11 @@ const EN = {
   "setup.loading": "Loading rounds…",
   "setup.max": "Up to {n} rounds per match.",
   "setup.pickOne": "Pick at least one round.",
+  "setup.timer": "Turn timer",
+  "setup.timerOff": "Off",
+  "setup.timerHint": "Just a countdown with a buzzer — the host decides what happens when time runs out.",
+  "game.timeUp": "Time’s up!",
+  "fx.sound": "Sound on/off",
 
   "kind.rated": "rated",
   "kind.manual": "manual",
@@ -206,6 +211,11 @@ const RU = {
   "setup.loading": "Загружаю раунды…",
   "setup.max": "Не больше {n} раундов за матч.",
   "setup.pickOne": "Выбери хотя бы один раунд.",
+  "setup.timer": "Таймер хода",
+  "setup.timerOff": "Выключен",
+  "setup.timerHint": "Просто обратный отсчёт с сигналом — что делать, когда время вышло, решает ведущий.",
+  "game.timeUp": "Время вышло!",
+  "fx.sound": "Звук вкл/выкл",
 
   "kind.rated": "рейтинг",
   "kind.manual": "ручной",

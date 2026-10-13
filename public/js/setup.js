@@ -88,6 +88,7 @@ export function initSetup({ onBack, onMatchStarted }) {
     const team1 = $("team1Input").value.trim() || t("setup.team1Default");
     const team2 = $("team2Input").value.trim() || t("setup.team2Default");
     store.set("eg.teams", [team1, team2]);
+    store.set("eg.timer", Number($("timerSelect").value) || 0);
     btn.disabled = true;
     try {
       const match = await post("/api/matches", { team1, team2, plan });
@@ -104,6 +105,7 @@ export async function showSetup() {
   const [t1, t2] = store.get("eg.teams", ["", ""]);
   $("team1Input").value = t1;
   $("team2Input").value = t2;
+  $("timerSelect").value = String(store.get("eg.timer", 0));
   $("setupError").textContent = "";
   $("roundPickList").replaceChildren(h("div", { class: "hint" }, t("setup.loading")));
 

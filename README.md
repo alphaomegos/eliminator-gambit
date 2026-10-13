@@ -16,6 +16,7 @@ is left, nobody fell for it and the round is a tie. A match is 1–10 rounds; th
 
 Rounds are authored in the built-in editor and stored per **game set** — a private space protected by a PIN.
 Rounds can be exported to / imported from a JSON file (images included).
+Sound effects and animations (mutable), an optional turn timer and undo of the last move help the host.
 The interface is available in English and Russian (auto-detected from the browser, switch in the header).
 
 ## Stack

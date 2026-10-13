@@ -103,9 +103,19 @@ await page.fill("#team2Input", "Foxes");
 await page.click(".roundPickRow:has-text('Odd one out')");
 await page.click(".roundPickRow:has-text('Pick a colour')");
 await page.click(".roundPickRow:has-text('Built-in')");
+await page.selectOption("#timerSelect", "30");
 await shot("03-setup");
 await page.click("#setupStart");
 await page.waitForSelector("#screenGame:not(.hidden)");
+
+step("turn timer runs for the active team; sound toggle");
+await page.waitForSelector("#team1Timer:not(.hidden)");
+const secs = Number(await page.textContent("#team1Timer"));
+if (!(secs > 25 && secs <= 30)) throw new Error(`unexpected timer value ${secs}`);
+if (await page.isVisible("#team2Timer")) throw new Error("only the active team should have a timer");
+await page.click("#gameSound");
+if (!(await page.isVisible("#gameSound.off"))) throw new Error("sound should be muted");
+await page.click("#gameSound");
 
 // --- round 1 (manual list)
 step("round 1: safe pick, reveal, reload & resume, hit target");
@@ -143,8 +153,12 @@ await page.click("#showAllBtn");
 await shot("06-show-all");
 await page.keyboard.press("Escape");
 await page.click(".carouselItem:has-text('Red')");
+await page.waitForSelector(".carouselItem.isEliminated:has-text('Red')");
 await page.click(".carouselItem:has-text('Green')");
-await page.waitForSelector("#roundStatus.tie:not(.hidden)");
+await page.waitForSelector("#roundStatus.tie:not(.hidden)").catch(async (e) => {
+  await shot("fail-carousel");
+  throw e;
+});
 await shot("07-carousel-done");
 
 // --- round 3 (built-in) on mobile viewport

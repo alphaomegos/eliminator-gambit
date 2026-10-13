@@ -87,6 +87,18 @@
               </div>
             </div>
             <div class="formRow">
+              <label class="label" for="timerSelect" data-i18n="setup.timer">Turn timer</label>
+              <select id="timerSelect" class="select">
+                <option value="0" data-i18n="setup.timerOff">Off</option>
+                <option value="15">15 s</option>
+                <option value="30">30 s</option>
+                <option value="45">45 s</option>
+                <option value="60">60 s</option>
+                <option value="90">90 s</option>
+              </select>
+              <div class="hint" data-i18n="setup.timerHint">Just a countdown with a buzzer — the host decides what happens when time runs out.</div>
+            </div>
+            <div class="formRow">
               <div class="rowBetween">
                 <span class="label" data-i18n="setup.pick">Pick 1–10 rounds. Click order is play order.</span>
                 <button id="setupClear" class="btn small secondary" type="button" data-i18n="setup.clear">Clear</button>
@@ -107,6 +119,7 @@
             <div class="sideTeam" id="team1Box">
               <div class="teamName" id="team1Name">Team 1</div>
               <div class="teamScore" id="team1Score">0</div>
+              <div class="teamTimer hidden" id="team1Timer"></div>
             </div>
             <div class="card gameHeaderCard">
               <div class="roundImageFrame hidden" id="roundImageFrame"><img id="roundImage" alt="" /></div>
@@ -115,6 +128,7 @@
                 <button id="gameUndo" class="btn small glass hidden" type="button" data-i18n-title="game.undoTitle" data-i18n="game.undo">↶ Undo</button>
               </div>
               <div class="gameCorner right">
+                <button id="gameSound" class="btn small glass iconBtn" type="button" data-i18n-title="fx.sound" data-i18n-aria-label="fx.sound">♪</button>
                 <button id="gameMenu" class="btn small glass" type="button" data-i18n="game.menu">Menu</button>
               </div>
               <div class="pill" id="roundCounter"></div>
@@ -125,6 +139,7 @@
             <div class="sideTeam" id="team2Box">
               <div class="teamName" id="team2Name">Team 2</div>
               <div class="teamScore" id="team2Score">0</div>
+              <div class="teamTimer hidden" id="team2Timer"></div>
             </div>
 
             <div class="roundMedia hidden" id="roundMedia">
@@ -201,6 +216,8 @@
         </section>
       </main>
     </div>
+
+    <div id="fxFlash" class="fxFlash" aria-hidden="true"></div>
 
     <!-- Generic dialog (alerts, confirms, results, item reveal) -->
     <div class="modal hidden" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">

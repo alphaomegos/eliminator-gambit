@@ -1,11 +1,19 @@
 import { ApiError, get, post } from "./api.js";
 import { $, activeScreen, alertError, confirmDialog, h, isDialogOpen, showDialog, toggle } from "./dom.js";
 import { onLangChange, t } from "./i18n.js";
+import { confetti, flash, floatPoints, isMuted, setMuted, shake, sound } from "./fx.js";
 
 let match = null;
 let carouselIndex = 0;
 let pending = false;
 let onExit = () => {};
+
+// Turn timer (client-side only; it never changes the score).
+let timerSeconds = 0;
+let timerKey = "";
+let deadline = 0;
+let lastTick = 0;
+let lastSecond = null;
 
 const teamName = (team) => (team === 1 ? match.team1 : team === 2 ? match.team2 : "");
 
@@ -68,6 +76,7 @@ function renderList() {
           class: cls.filter(Boolean).join(" "),
           tabindex: clickable ? "0" : null,
           role: clickable ? "button" : null,
+          dataset: { itemId: item.id },
           onclick: () => onItem(item),
           onkeydown: (e) => {
             if (e.key === "Enter" || e.key === " ") {
@@ -168,6 +177,82 @@ function render() {
   if (carousel) renderCarousel();
   else renderList();
   if (!$("showAllOverlay").classList.contains("hidden")) renderShowAll();
+  syncTimer();
+}
+
+// ---------- effects ----------
+
+const itemEl = (id) => document.querySelector(`[data-item-id="${CSS.escape(id)}"]`);
+const teamBox = (team) => $(team === 1 ? "team1Box" : "team2Box");
+
+function playEvent(ev) {
+  if (!ev) return;
+  floatPoints(teamBox(ev.team), ev.points);
+  flash(teamBox(ev.team), "scored", 700);
+  const el = itemEl(ev.item_id);
+  if (ev.kind === "hit_target") {
+    sound.boom();
+    shake();
+    flash(el, "explode", 900);
+  } else if (ev.kind === "undo") {
+    sound.undo();
+    flash(el, "restored", 900);
+  } else {
+    sound.pick();
+    flash(el, "popOut", 600);
+    if (ev.kind === "cleared") setTimeout(() => sound.tie(), 180);
+  }
+  if (ev.kind !== "safe" && ev.kind !== "undo") flash($("roundStatus"), "popIn", 700);
+}
+
+function renderSoundButton() {
+  const btn = $("gameSound");
+  btn.classList.toggle("off", isMuted());
+  btn.setAttribute("aria-pressed", String(!isMuted()));
+}
+
+// ---------- turn timer ----------
+
+function syncTimer() {
+  const round = match?.round;
+  const running = !!round && timerSeconds > 0 && round.status === "active" && match.status === "active";
+  for (const team of [1, 2]) toggle($(`team${team}Timer`), running && round.current_team === team);
+  if (!running) {
+    timerKey = "";
+    return;
+  }
+  const key = `${round.id}:${round.current_team}:${round.items.filter((i) => i.eliminated).length}`;
+  if (key !== timerKey) {
+    timerKey = key;
+    deadline = performance.now() + timerSeconds * 1000;
+    lastSecond = null;
+  }
+  drawTimer();
+}
+
+function drawTimer() {
+  if (!timerKey) return;
+  const el = $(`team${match.round.current_team}Timer`);
+  const left = Math.max(0, Math.ceil((deadline - performance.now()) / 1000));
+  el.textContent = left > 0 ? `${left}` : t("game.timeUp");
+  el.classList.toggle("low", left > 0 && left <= 5);
+  el.classList.toggle("timeUp", left === 0);
+  if (left !== lastSecond) {
+    if (lastSecond !== null && left > 0 && left <= 5) sound.tick();
+    if (lastSecond !== null && left === 0) {
+      sound.buzzer();
+      flash(teamBox(match.round.current_team), "scored", 700);
+    }
+    lastSecond = left;
+  }
+}
+
+function timerLoop(now) {
+  // Pause while a dialog is open or the tab is hidden.
+  if (timerKey && (isDialogOpen() || document.hidden || activeScreen() !== "screenGame")) deadline += now - lastTick;
+  lastTick = now;
+  if (timerKey && activeScreen() === "screenGame") drawTimer();
+  requestAnimationFrame(timerLoop);
 }
 
 // ---------- actions ----------
@@ -194,6 +279,7 @@ async function eliminate(itemId) {
   try {
     match = await post(`/api/matches/${match.id}/eliminate`, { item_id: itemId });
     render();
+    playEvent(match.event);
     const picked = match.round.items.find((i) => i.id === itemId);
     if (picked && match.round.kind !== "carousel" && picked.image_url) await reveal(picked);
     if (match.status === "finished") await showFinal();
@@ -223,6 +309,7 @@ async function undo() {
   try {
     match = await post(`/api/matches/${match.id}/undo`);
     render();
+    playEvent(match.event);
   } catch (e) {
     await alertError(e);
     await refresh();
@@ -265,6 +352,8 @@ async function showFinal() {
     h("div", { class: score1 >= score2 ? "lead" : "" }, h("span", {}, team1), h("b", {}, String(score1))),
     h("div", { class: score2 >= score1 ? "lead" : "" }, h("span", {}, team2), h("b", {}, String(score2))),
   );
+  sound.fanfare();
+  confetti();
   const choice = await showDialog({
     title,
     body,
@@ -305,6 +394,16 @@ export function initGame({ onMenu }) {
   $("gameMenu").addEventListener("click", onMenu);
   $("gameNext").addEventListener("click", nextRound);
   $("gameUndo").addEventListener("click", undo);
+  $("gameSound").addEventListener("click", () => {
+    setMuted(!isMuted());
+    renderSoundButton();
+    sound.pick();
+  });
+  renderSoundButton();
+  requestAnimationFrame((now) => {
+    lastTick = now;
+    timerLoop(now);
+  });
   onLangChange(() => match && render());
   $("showAllBtn").addEventListener("click", openShowAll);
   $("showAllClose").addEventListener("click", closeShowAll);
@@ -348,6 +447,12 @@ export function initGame({ onMenu }) {
 
 export function showGame(m) {
   match = m;
+  try {
+    timerSeconds = Number(JSON.parse(localStorage.getItem("eg.timer") || "0")) || 0;
+  } catch {
+    timerSeconds = 0;
+  }
+  timerKey = "";
   carouselIndex = 0;
   closeShowAll();
   render();
