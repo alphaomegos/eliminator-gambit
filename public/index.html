@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0c10" />
+    <meta name="description" content="A party game of strategy and risk: eliminate everything except the worst option." />
+    <title>The Eliminator’s Gambit</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/js/main.js"></script>
+  </head>
+  <body>
+    <div class="page">
+      <header class="header" id="appHeader">
+        <div class="brand">
+          <div class="title">The Eliminator’s Gambit</div>
+          <div class="subtitle">Eliminate carefully. One wrong tap ends the round.</div>
+        </div>
+        <div class="headerMeta" id="headerMeta"></div>
+      </header>
+
+      <main class="main">
+        <!-- BOOT -->
+        <section id="screenBoot" class="screen">
+          <div class="card centerText mutedSmall">Loading…</div>
+        </section>
+
+        <!-- LOGIN -->
+        <section id="screenLogin" class="screen hidden">
+          <form class="card form narrow" id="loginForm" autocomplete="off">
+            <div class="formRow">
+              <label class="label" for="loginName">Game set name</label>
+              <input id="loginName" class="input upper" maxlength="16" placeholder="e.g. EDUARD" autocapitalize="characters" spellcheck="false" />
+              <div class="hint">4–16 letters or digits. Everyone at your party uses the same name.</div>
+            </div>
+            <div class="formRow hidden" id="loginPinRow">
+              <label class="label" for="loginPin" id="loginPinLabel">PIN</label>
+              <input id="loginPin" class="input" type="password" maxlength="32" inputmode="text" autocomplete="current-password" />
+              <div class="hint" id="loginHint"></div>
+            </div>
+            <div class="formActions">
+              <button id="loginSubmit" class="btn" type="submit" disabled>Continue</button>
+            </div>
+            <div class="status error" id="loginError" role="alert"></div>
+          </form>
+        </section>
+
+        <!-- MENU -->
+        <section id="screenMenu" class="screen hidden">
+          <div class="card">
+            <div class="menuGrid">
+              <button id="menuResume" class="btn big success hidden" type="button">Continue match</button>
+              <button id="menuNewGame" class="btn big" type="button">New game</button>
+              <button id="menuEditor" class="btn big secondary" type="button">Edit rounds</button>
+              <button id="menuPin" class="btn big secondary" type="button">Change PIN</button>
+              <button id="menuLogout" class="btn big secondary" type="button">Log out</button>
+            </div>
+            <div class="hint centerText" id="menuResumeHint"></div>
+          </div>
+          <details class="card rules">
+            <summary>How to play</summary>
+            <ol>
+              <li>Two teams take turns eliminating one option at a time.</li>
+              <li>Somewhere in the list hides the target — the worst / lowest / odd one out.</li>
+              <li>Each safe elimination gives your team <b>+1</b>. Eliminating the target costs <b>−4</b> and ends the round.</li>
+              <li>If only the target is left, nobody hit it and the round is a tie.</li>
+            </ol>
+          </details>
+        </section>
+
+        <!-- SETUP -->
+        <section id="screenSetup" class="screen hidden">
+          <form class="card form" id="setupForm">
+            <div class="teamInputs">
+              <div class="formRow">
+                <label class="label" for="team1Input">First team</label>
+                <input id="team1Input" class="input" maxlength="40" placeholder="Team 1" />
+              </div>
+              <div class="formRow">
+                <label class="label" for="team2Input">Second team</label>
+                <input id="team2Input" class="input" maxlength="40" placeholder="Team 2" />
+              </div>
+            </div>
+            <div class="formRow">
+              <div class="rowBetween">
+                <span class="label">Pick 1–10 rounds. Click order is play order.</span>
+                <button id="setupClear" class="btn small secondary" type="button">Clear</button>
+              </div>
+              <div id="roundPickList" class="roundPickList"></div>
+            </div>
+            <div class="formActions">
+              <button id="setupStart" class="btn success" type="submit">Start</button>
+              <button id="setupBack" class="btn secondary" type="button">Back</button>
+            </div>
+            <div class="status error" id="setupError" role="alert"></div>
+          </form>
+        </section>
+
+        <!-- GAME -->
+        <section id="screenGame" class="screen hidden">
+          <div class="gameLayout">
+            <div class="sideTeam" id="team1Box">
+              <div class="teamName" id="team1Name">Team 1</div>
+              <div class="teamScore" id="team1Score">0</div>
+            </div>
+            <div class="card gameHeaderCard">
+              <div class="roundImageFrame hidden" id="roundImageFrame"><img id="roundImage" alt="" /></div>
+              <div class="gameCorner left">
+                <button id="gameNext" class="btn success small hidden" type="button">Next round →</button>
+              </div>
+              <div class="gameCorner right">
+                <button id="gameMenu" class="btn small glass" type="button">Menu</button>
+              </div>
+              <div class="pill" id="roundCounter"></div>
+              <div class="pill prompt" id="prompt"></div>
+              <div class="pill roundStatus hidden" id="roundStatus" role="status"></div>
+              <button id="showAllBtn" class="btn small glass showAllBtn hidden" type="button">Show everything</button>
+            </div>
+            <div class="sideTeam" id="team2Box">
+              <div class="teamName" id="team2Name">Team 2</div>
+              <div class="teamScore" id="team2Score">0</div>
+            </div>
+
+            <div class="roundMedia hidden" id="roundMedia">
+              <div class="carouselFrame" id="carouselFrame">
+                <button id="carouselPrev" class="carouselBtn prev" type="button" aria-label="Previous"></button>
+                <div class="carouselViewport" id="carouselViewport">
+                  <div class="carouselTrack" id="carouselTrack"></div>
+                </div>
+                <button id="carouselNext" class="carouselBtn next" type="button" aria-label="Next"></button>
+              </div>
+            </div>
+            <ol class="answersGrid" id="itemsList"></ol>
+          </div>
+
+          <div id="showAllOverlay" class="showAllOverlay hidden">
+            <div class="showAllGrid" id="showAllGrid"></div>
+            <button id="showAllClose" class="btn glass showAllClose" type="button">Close</button>
+          </div>
+        </section>
+
+        <!-- EDITOR -->
+        <section id="screenEditor" class="screen hidden">
+          <div class="editor">
+            <aside class="card editorList">
+              <div class="rowBetween">
+                <div class="editorTitle">Rounds</div>
+                <button id="editorAdd" class="btn small" type="button">+ New</button>
+              </div>
+              <div id="templatesList" class="templatesList"></div>
+              <div class="editorFooter">
+                <button id="editorExport" class="btn small secondary" type="button">Export</button>
+                <button id="editorImport" class="btn small secondary" type="button">Import</button>
+                <input id="editorImportFile" type="file" accept="application/json,.json" class="hidden" />
+                <button id="editorBack" class="btn small secondary" type="button">Back</button>
+              </div>
+            </aside>
+
+            <form class="card editorMain form" id="editorForm" autocomplete="off">
+              <div class="formRow">
+                <label class="label" for="tplKind">Round type</label>
+                <select id="tplKind" class="select">
+                  <option value="rated">Rated — lowest rating is the target</option>
+                  <option value="manual">Manual — host marks the target</option>
+                  <option value="carousel">Carousel — picture cards, host marks the target</option>
+                </select>
+              </div>
+              <div class="formRow">
+                <label class="label" for="tplName">Round name</label>
+                <input id="tplName" class="input" maxlength="120" placeholder="e.g. Movies — worst rated" />
+              </div>
+              <div class="formRow">
+                <label class="label" for="tplPrompt">Prompt shown to players</label>
+                <input id="tplPrompt" class="input" maxlength="300" placeholder="e.g. Find the lowest-rated movie." />
+              </div>
+              <div class="formRow">
+                <span class="label">Background image (optional)</span>
+                <div class="imagePicker" id="tplImagePicker"></div>
+              </div>
+
+              <div class="rowBetween itemsHeader">
+                <div class="editorTitle">Items</div>
+                <div class="mutedSmall" id="itemsHint"></div>
+              </div>
+              <div id="tplItems" class="tplItems"></div>
+
+              <div class="formActions sticky">
+                <button id="editorSave" class="btn success" type="submit">Save</button>
+                <button id="editorDuplicate" class="btn secondary" type="button">Duplicate</button>
+                <button id="editorDelete" class="btn danger" type="button">Delete</button>
+                <span class="status" id="editorStatus" role="status"></span>
+              </div>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Generic dialog (alerts, confirms, results, item reveal) -->
+    <div class="modal hidden" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modalCard" id="modalCard">
+        <div class="modalTitle" id="modalTitle"></div>
+        <div class="modalImage hidden" id="modalImageWrap"><img id="modalImage" alt="" /></div>
+        <div class="modalText" id="modalText"></div>
+        <div class="modalActions" id="modalActions"></div>
+      </div>
+    </div>
+  </body>
+</html>

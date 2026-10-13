@@ -1,6 +1,7 @@
 .DS_Store
-.env
-__pycache__/
-*.pyc
-pgdata/
-
+node_modules/
+.wrangler/
+.dev.vars
+*.log
+test-results/
+e2e/out/

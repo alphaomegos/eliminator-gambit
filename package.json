@@ -1,0 +1,24 @@
+{
+  "name": "eliminators-gambit",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler d1 migrations apply eliminators-gambit --local && wrangler dev",
+    "deploy": "wrangler d1 migrations apply eliminators-gambit --remote && wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test",
+    "e2e": "node e2e/smoke.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.0",
+    "@cloudflare/workers-types": "^5.20261013.1",
+    "playwright": "^1.64.0",
+    "typescript": "5.9",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.146.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
